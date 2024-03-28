@@ -1,6 +1,6 @@
-[TOC]
 
-<h1>Eukaryotic Genome Annotation Pipeline - external (EGAPx)</h1>
+
+# Eukaryotic Genome Annotation Pipeline - External (EGAPx)
 
 EGAPx is the publicly accessible version of the updated NCBI [Eukaryotic Genome Annotation Pipeline](https://www.ncbi.nlm.nih.gov/genome/annotation_euk/process/). 
 
@@ -20,7 +20,7 @@ See the EGAPx license [here](https://github.com/ncbi/egapx.git).
 
 
 
-<h2>Prerequisites</h2>
+## Prerequisites
 
 - Docker or Singularity  
 - AWS batch, UGE cluster, or a r6a.4xlarge machine (32 CPUs, 256GB RAM) 
@@ -31,7 +31,7 @@ Notes:
 - General configuration for AWS Batch is described in the Nextflow documentation at https://www.nextflow.io/docs/latest/aws.html
 - See Nextflow installation at https://www.nextflow.io/docs/latest/getstarted.html
 
-<h2>The workflow files</h2>
+## The workflow files
 
 - Clone the EGAPx repo:
   ```
@@ -39,7 +39,7 @@ Notes:
   cd egapx
   ```
 
-<h2>Input data format</h2>
+## Input data format
 
 Input to EGAPx is in the form of a YAML file. 
 
@@ -71,7 +71,7 @@ The following are the _optional_ key-value pairs for the input file:
 
 
 
-<h2>Input example</h2>  
+## Input example
  
 - A test example YAML file `./examples/input_D_farinae_small.yaml` is included in the `egapx` folder. Here, the RNA-seq data is provided as paths to the reads FASTA files. These FASTA files are a sampling of the reads from the complete SRA read files to expedite testing. Currently for paired-end data specified by `reads:`, filenames **must** end in .1 and .2
 
@@ -102,7 +102,7 @@ The following are the _optional_ key-value pairs for the input file:
 
 - First, test EGAPx on the example provided (`input_D_farinae_small.yaml`, a dust mite) to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_tellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.  
 
-<h2>Run EGAPx</h2>
+## Run EGAPx
 
 - The `egapx` folder contains the following directories:
     - examples
@@ -177,7 +177,7 @@ The following are the _optional_ key-value pairs for the input file:
       ```
 
 
-<h2>Test run</h2>
+## Test run
 
 ```
 $ python3 ui/egapx.py examples/input_D_farinae_small.yaml -e aws -o example_out -w s3://temp_datapath/D_farinae
@@ -227,7 +227,7 @@ Duration    : 27m 36s
 CPU hours   : 4.2
 Succeeded   : 67
 ```
-<h2>Output</h2>
+## Output
 
 Look at the output in the out diectory (`example_out`) that was supplied in the command line. The annotation file is called `accept.gff`. 
 ```
@@ -243,7 +243,7 @@ The `nextflow.log` is the log file that captures all the process information and
 
 
 
-<h2>Intermediate files</h2>
+## Intermediate files
 
 In the above log, each line denotes the process that completed in the workflow. The first column (_e.g._ `[96/621c4b]`) is the subdirectory where the intermediate output files and logs are found for the process in the same line, _i.e._, `egapx:miniprot:run_miniprot`. To see the intermediate files for that process, you can go to the work directory path that you had supplied and traverse to the subdirectory `96/621c4b`: 
 
@@ -266,6 +266,6 @@ $ aws s3 ls s3://temp_datapath/D_farinae/96/621c4ba4e6e87a4d869c696fe50034/outpu
 2024-03-27 11:20:24   17127134 aligns.paf
 ```
 
-<h2>Contact us </h2>
+## Contact us
 
 Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues)  if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions. 
