@@ -16,7 +16,7 @@ The current version is an alpha release with limited features and organism scope
 EGAPx has dependencies in and outside of its execution path that include several thousand files from the [NCBI C++ toolkit](https://www.ncbi.nlm.nih.gov/toolkit), and more than a million total lines of code. Static Application Security Testing has shown a small number of verified buffer overrun security vulnerabilities. Users should consult with their organizational security team on risk and if there is concern, consider mitigating options like running via VM or cloud instance. 
 
 **License:**
-See the EGAPx license [here](https://github.com/ncbi/egapx.git).
+See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
 
 
 
