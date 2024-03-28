@@ -1,0 +1,3 @@
+genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/029//603/195/GCF_029603195.1_ASM2960319v2/GCF_029603195.1_ASM2960319v2_genomic.fna.gz
+reads_query: 'txid2530218[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession]'
+taxid: 2530218

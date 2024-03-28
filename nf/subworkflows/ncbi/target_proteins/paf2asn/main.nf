@@ -1,0 +1,38 @@
+#!/usr/bin/env nextflow
+
+nextflow.enable.dsl=2
+
+include { merge_params } from '../../utilities'
+
+
+workflow paf2asn {
+    take:
+        genome_asn_file   //path: genome asn file
+        proteins_asn_file //path: protein asn file
+        paf_file          //path: paf alignment file from miniprot
+        parameters        // Map : extra parameter and parameter update
+    main:
+        default_params = ""
+        effective_params = merge_params(default_params, parameters, 'paf2asn')
+        run_paf2asn(genome_asn_file, proteins_asn_file, paf_file, effective_params)
+
+    emit:
+        asn_file = run_paf2asn.out.asn_file
+}
+
+
+process run_paf2asn {
+    input:
+        path (genome,  stageAs: 'LDS_Index/genome.asnt')
+        path (proteins,  stageAs: 'LDS_Index/proteins.asnt')
+        path paf_file
+        val parameters
+    output:
+        path 'output/align.asn', emit: 'asn_file'
+    script:
+    """
+    mkdir -p output
+    lds2_indexer -source LDS_Index
+    paf2asn ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank -input ${paf_file} -o output/align.asn
+    """
+}

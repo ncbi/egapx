@@ -1,0 +1,3 @@
+genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/030/936/135/GCF_030936135.1_bGavSte3.hap2/GCF_030936135.1_bGavSte3.hap2_genomic.fna.gz
+reads_query: 'txid37040[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession]'
+taxid: 37040

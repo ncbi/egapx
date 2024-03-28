@@ -1,0 +1,62 @@
+tasks:
+  setup:
+    convert_genome: force-local-ids
+    convert_proteins: force-local-ids
+  bam_bin_and_sort:
+    bam_bin: -avg-size-per-bin 200000000 -file-pattern 'bin#.bam' -exclude-organelle
+  bam_strandedness:
+    rnaseq_divide_by_strandedness: -min-aligned 1000000 -min-unambiguous 200 -min-unambiguous-pct
+      2 -percentage-threshold 98
+  chainer:
+    chainer_wnode: -altfrac 80.0 -capgap 5 -cdsbonus 0.05 -composite 10000 -end-pair-support-cutoff
+      0.1 -endprotfrac 0.05 -filters 'remove_single_exon_est_models remove_single_exon_noncoding_models'
+      -high-identity 0.98 -hmaxlen 0.25 -hthresh 0.02 -i3p 14.0 -i5p 7.0 -lenpen 0.005
+      -longenoughcds 900 -max-extension 20 -min-consensus-support 2 -min-edge-coverage
+      5 -min-non-consensussupport 10 -min-support-fraction 0.03 -minex 10 -mininframefrac
+      0.95 -minlen 225 -minpolya 6 -minprotfrac 0.9 -minscor 40.0 -minsupport 3 -minsupport_mrna
+      1 -minsupport_rnaseq 5 -mrnaCDS use_objmgr -oep 10 -protcdslen 450 -sharp-boundary
+      0.2 -tolerance 3 -trim 6 -utrclipthreshold 0.01 -fillgenomicgaps -filterest
+      -filtermrna -filterprots -opposite
+    gpx_make_outputs: -default-output-name chains -slices-for affinity -sort-by affinity
+    input_aligns_sort: merge_only
+    submit_chainer: -minimum-abut-margin 20 -separate-within-introns
+  convert_from_bam:
+    sam2asn: -filter 'pct_identity_gap >= 95' -ofmt seq-align-compressed -collapse-identical
+      -no-scores
+  getfasta:
+    getfasta: -u full-assembly -bare-accession -use-reference-non-nuclear
+  gnomon:
+    annot_wnode: -margin 1000 -mincont 1000 -minlen 225 -mpp 10.0 -ncsp 25 -window
+      200000 -nonconsens -open
+    generic_action_node: -app annot_wnode
+    gpx_qdump: -slices-for affinity -sort-by affinity -unzip '*'
+    gpx_qsubmit: ''
+  prot_gnomon_prepare:
+    prot_gnomon_prepare: ''
+  rnaseq_collapse:
+    gpx_make_outputs: -default-output-name align -slices-for affinity -sort-by job-id
+      -unzip align
+    gpx_qsubmit: -affinity subject
+    rnaseq_collapse: -backlog 1 -max-jobs 1 -rank-counts-precalculated
+    rnaseq_collapse_create_jobs: -alignments-per-job 50000 -min-range 100000
+  star_index:
+    STAR: --runThreadN 8
+  star_wnode:
+    gpx_qdump: -unzip '*'
+    gpx_qsubmit: -affinity subject
+    star_wnode: -cpus-per-worker 16 -csi-threshold 512000000 -max-intron 600000 -star-params
+      '--alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax
+      50 --runThreadN 16 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes
+      NH HI AS nM NM MD jM jI XS MC --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
+      50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None'
+      -preserve-star-logs
+  miniprot:
+    miniprot: -t 8 -p 0.4 --outs=0.4 -G 600000
+  paf2asn:
+    paf2asn: -prosplign-refinement
+  best_aligned_prot:
+    best_aligned_prot: -asm_alns_filter 'reciprocity = 3'
+  chainer_sort_alignments:
+    align_sort:  -ifmt seq-align  -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
+  align_filter_sa:
+    align_filter:  -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  

@@ -1,0 +1,3 @@
+# -*- coding: utf-8
+# Dependencies for ui/egapx.py
+PyYAML
