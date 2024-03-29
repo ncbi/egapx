@@ -1,12 +1,10 @@
-
-
-# Eukaryotic Genome Annotation Pipeline - External (EGAPx)
+# Eukaryotic Genome Annotation Pipeline - External (EGAPx) 
 
 EGAPx is the publicly accessible version of the updated NCBI [Eukaryotic Genome Annotation Pipeline](https://www.ncbi.nlm.nih.gov/genome/annotation_euk/process/). 
 
-EGAPx takes an assembly fasta file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets, and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq, to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on hmm models. The final annotation for the input assembly is produced as a gff file. 
+EGAPx takes an assembly fasta file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. The final annotation for the input assembly is produced as a `gff` file. 
 
-We currently have protein datasets posted for most vertebrates (mammals, sauropsids, ray-finned fishes), hymenoptera, diptera, lepidoptera and choleoptera, and will be adding datasets for more arthropods, vertebrates, and plants in the next couple of months. Fungi, protists, and nematodes are currently out-of-scope for EGAPx pending additional refinements.
+We currently have protein datasets posted for most vertebrates (mammals, sauropsids, ray-finned fishes), hymenoptera, diptera, lepidoptera and choleoptera. We will be adding datasets for more arthropods, vertebrates and plants in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
 
 **Warning:**
 The current version is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use. Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues)  if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.  
@@ -43,31 +41,33 @@ Notes:
 
 Input to EGAPx is in the form of a YAML file. 
 
-The following two are the _required_ key-value pairs for the input file:
+- The following two are the _required_ key-value pairs for the input file:
 
-```
-genome: path to assembled genome in FASTA format
-taxid: NCBI Taxonomy identifier of the target organism
-```
+  ```
+  genome: path to assembled genome in FASTA format
+  taxid: NCBI Taxonomy identifier of the target organism 
+  ```
+  You can obtain taxid from the [NCBI Taxonomy page](https://www.ncbi.nlm.nih.gov/taxonomy).
 
-The following are the _optional_ key-value pairs for the input file:
 
-- RNA-seq data. Use one of the following options:
-  ```
-  reads: [ array of paths to reads FASTA files]
-  reads_ids: [ array of SRA run ids ]
-  reads_query: query for reads SRA
-  ```
+- The following are the _optional_ key-value pairs for the input file:
 
-- A protein set. A taxid-based protein set will be chosen if no protein set is provided.
-  ```
-  proteins: path to proteins data in FASTA format. 
-  ```
+  - RNA-seq data. Use one of the following options:
+    ```
+    reads: [ array of paths to reads FASTA files]
+    reads_ids: [ array of SRA run ids ]
+    reads_query: query for reads SRA
+    ```
 
-- HMM file used in Gnomon training. A taxid-based HMM will be chosen if no HMM file is provided.
-  ```
-  hmm: path to HMM file
-  ```
+  - A protein set. A taxid-based protein set will be chosen if no protein set is provided.
+    ```
+    proteins: path to proteins data in FASTA format. 
+    ```
+
+  - HMM file used in Gnomon training. A taxid-based HMM will be chosen if no HMM file is provided.
+    ```
+    hmm: path to HMM file
+    ```
 
 
 
@@ -98,7 +98,7 @@ The following are the _optional_ key-value pairs for the input file:
     reads_query: 'txid6954[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession] AND (SRR8506572[Accession] OR SRR9005248[Accession] )'
     ```
 
-  **Note:** Both the above examples `reads_ids` and `reads_query` will have more RNA-seq data than the `input_D_farinae_small.yaml` example. To make sure there aren't a large number of SRA runs, please run your `reads_query` query in NCBI SRA page first. If there are too many SRA runs, then select a few of them and use the `reads_ids` option.   
+  **Note:** Both the above examples `reads_ids` and `reads_query` will have more RNA-seq data than the `input_D_farinae_small.yaml` example. To make sure the `reads_query` does not produce a large number of SRA runs, please run it first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and use the `reads_ids` option.   
 
 - First, test EGAPx on the example provided (`input_D_farinae_small.yaml`, a dust mite) to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_tellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.  
 
@@ -130,18 +130,20 @@ The following are the _optional_ key-value pairs for the input file:
   ```
   - When you run `egapx.py` for the first time it copies the template config files to the directory `./egapx_config`.
   - You will need to edit these templates to reflect the actual parameters of your setup.
-    - For AWS Batch execution you need to edit the value for `process.queue` in `aws.config` file.
-    - For local execution on the local machine you don't need to adjust anything.
+    - For AWS Batch execution, set up AWS Batch Service following advice in the AWS link above. Then edit the value for `process.queue` in `./egapx_config/aws.config` file.
+    - For execution on the local machine you don't need to adjust anything.
 
 
-- Run EGAPx with the following command for real this time.  
+- Run EGAPx with the following command for real this time.
+  - For AWS Batch execution, replace temp_datapath with an existing S3 bucket.
+  - For local execution, use a local path for `-w` 
   ```
   python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e aws -w s3://temp_datapath/D_farinae -o example_out
   ```
     
     - use `-e aws` for AWS batch using Docker image
-    - use `-e docker` for using Docker image locally
-    - use `-e singularity` for using the Singularity image locally
+    - use `-e docker` for using Docker image
+    - use `-e singularity` for using the Singularity image
     - type `python3 ui/egapx.py  -h ` for the help menu 
 
       ```
@@ -239,7 +241,7 @@ run.timeline.html
 run.trace.txt
 run_params.yaml
 ```
-The `nextflow.log` is the log file that captures all the process information and their work directories. `run_params.yaml` has all the parameters that was used in the EGAPx run. More information about the process time and resources can be found in the other run* files.  
+The `nextflow.log` is the log file that captures all the process information and their work directories. `run_params.yaml` has all the parameters that were used in the EGAPx run. More information about the process time and resources can be found in the other run* files.  
 
 
 
