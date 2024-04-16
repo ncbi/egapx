@@ -138,7 +138,7 @@ Input to EGAPx is in the form of a YAML file.
   - For AWS Batch execution, replace temp_datapath with an existing S3 bucket.
   - For local execution, use a local path for `-w` 
   ```
-  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e aws -w s3://temp_datapath/D_farinae -o example_out
+  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e aws -w s3://temp_datapath/D_farinae -o example_out
   ```
     
     - use `-e aws` for AWS batch using Docker image
