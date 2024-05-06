@@ -37,4 +37,11 @@ process convert {
     # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
     sam2asn $conv_param -refs-local-by-default  -nogenbank -lds2 LDS2 -tmp-dir \$tmpdir -align-counts "${prefix}.align_counts.txt" -o "${prefix}.align.asnb.gz" -strandedness $strandedness -input $in_bam -samtools-path \$samtools
     """
+
+    stub:
+        prefix = in_bam.name.replaceAll(/\.bam$/, '')
+    """
+    touch ${prefix}.align_counts.txt
+    touch ${prefix}.align.asnb.gz
+    """
 }

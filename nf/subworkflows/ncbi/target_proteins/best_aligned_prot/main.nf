@@ -42,4 +42,10 @@ process run_best_aligned_prot {
     echo "$alignment_asn_file" > align.mft
     best_placement ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank  -gc_path $gencoll_file -in_alns align.mft -out_alns output/align.asn -out_rpt  output/report.txt
     """
+    stub:
+    """
+    mkdir -p output
+    touch output/align.asn
+    touch output/report.txt
+    """
 }

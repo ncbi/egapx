@@ -47,6 +47,15 @@ process generate_jobs {
     (( lines_per_file = (total_lines + ${njobs} - 1) / ${njobs} ))
     split -l\$lines_per_file jobs job. -da 3
     """
+
+    stub:
+    """
+    for i in {1..$njobs}; do
+        echo "<job query =\\\"lcl|SOME_GENOME_ID:\${i}-\${i}\\\"></job>" >> jobs
+    done
+    split -l1 jobs job. -da 3
+    lines_per_file=1
+    """
 }
 
 
@@ -98,6 +107,15 @@ process run_rnaseq_collapse {
         fi
     done
     """
+    
+    stub:
+    """
+    filename=\$(basename -- "$job")
+    extension="\${filename##*.}"
+    mkdir -p output
+    touch output/rnaseq_collapse_wnode.\${extension}.out
+    """
+
 }
 
 
@@ -112,5 +130,16 @@ process run_gpx_make_outputs {
     """
     mkdir -p output
     gpx_make_outputs $params -input-path input -output output/@.#.out -output-manifest output/@.mft -slices-manifest output/@_slices.mft -num-partitions 1
+    """
+
+    stub:
+    """
+    mkdir -p output
+    echo ${files}
+    for i in {1..10}; do
+        touch output/align.\$i.out
+        touch output/align.\$i.out.slices
+    done
+
     """
 }

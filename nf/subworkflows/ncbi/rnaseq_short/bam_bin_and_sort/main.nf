@@ -39,11 +39,13 @@ process calc_assembly_sizes {
         chunk_size=`wc -c \${s} | awk '{print \$1}'`
         # Select assembly name
         s=\$(basename \${s})
-        # remove -Aligned.out.Sorted.bam from the string
-        s=\${s%-Aligned.out.Sorted.bam}
-        # Split the string by '-' to get the assembly name
-        IFS=- read -a parts <<< "\$s"
-        assembly=\${parts[0]}
+        regex="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
+        if [[ \$s =~ \$regex ]]; then
+            assembly="\${BASH_REMATCH[1]}"
+        else
+            echo "Malformed BAM name, \${s}"
+            exit 1
+        fi
         # Update assembly -> total_size map
         echo "Assembly: \${assembly}, chunk size: \${chunk_size}"
         if [[ -z "\${assembly_sizes[\${assembly}]}" ]]; then
@@ -53,6 +55,11 @@ process calc_assembly_sizes {
         fi
     done
     declare -p assembly_sizes > assembly_sizes.hash
+    """
+
+    stub:
+    """
+    touch assembly_sizes.hash
     """
 }
 
@@ -75,12 +82,14 @@ process bam_bin {
     mkdir -p $output
     echo "bam file : ${sorted_bam}, index file : ${sorted_bam_index}"
     s=\$(basename ${sorted_bam})
-    # remove -Aligned.out.Sorted.bam from the string
-    s=\${s%-Aligned.out.Sorted.bam}
-    # Split the string by '-' to get the assembly name
-    IFS=- read -a parts <<< "\$s"
-    assembly=\${parts[0]}
-    run=\${parts[1]}
+    regex="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
+    if [[ \$s =~ \$regex ]]; then
+        assembly="\${BASH_REMATCH[1]}"
+        run="\${BASH_REMATCH[2]}"
+    else
+        echo "Malformed BAM name, ${sorted_bam}"
+        exit 1
+    fi
 
     source $assembly_sizes
     total_size=\${assembly_sizes[\$assembly]}
@@ -96,6 +105,24 @@ process bam_bin {
     bam_bin $bam_bin_params -bam $sorted_bam -o $output/\$assembly-\$run.bins -total-bam-size \$total_size \
         -fasta-manifest genome.mft -organelle-manifest organelle.mft -samtools-path \$samtools
     """
+
+    stub:
+        output = "output"
+    """
+    mkdir -p $output
+    
+    s=\$(basename ${sorted_bam})
+    regex="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
+    if [[ \$s =~ \$regex ]]; then
+        assembly="\${BASH_REMATCH[1]}"
+        run="\${BASH_REMATCH[2]}"
+    else
+        echo "Malformed BAM name, ${sorted_bam}"
+        exit 1
+    fi
+
+    touch $output/\$assembly-\$run.bins
+    """
 }
 
 
@@ -104,17 +131,20 @@ process merge_prepare {
         path runs
     output:
         path "*.bin_args"
+    script:
     """
     #!/usr/bin/env bash
 
     declare -A bin_map
     for run in $runs; do
         s=\$(basename \${run})
-        # remove .bins from the string
-        s=\${s%.bins}
-        # Split the string by '-' to get the assembly name
-        IFS=- read -a parts <<< "\$s"
-        assembly=\${parts[0]}
+        regex="^(.+)-([^-]+)[.]bins\$"
+        if [[ \$s =~ \$regex ]]; then
+            assembly="\${BASH_REMATCH[1]}"
+        else
+            echo "Malformed bins name, \${run}"
+            exit 1
+        fi
         for bam in \$run/*.bam; do
             key="\$assembly-\$(basename \$bam)"
             if [[ -z \${bin_map[\$key]} ]]; then
@@ -128,6 +158,11 @@ process merge_prepare {
         echo "merge --threads 8 \$bin \${bin_map[\$bin]}" >\$bin.bin_args
     done
     """
+
+    stub:
+    """
+    touch 1.bin_args
+    """
 }
 
 
@@ -138,7 +173,12 @@ process merge {
         path bins
     output:
         path "*.bam"
+    script:
     """
         samtools `cat $merge_args`   
     """
-}
+    
+    stub:
+    """
+        touch 1.bam
+    """}

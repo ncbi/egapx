@@ -75,9 +75,11 @@ process generate_jobs {
     """
     stub:
     """
-    #for i in {1..16}; do
-    #    echo "<job query =\\\"lcl|${sort_aligns}\\\"></job>" > job.\$i
-    #done
+    for i in {1..$split_count}; do
+        echo "<job query =\\\"lcl|${sort_aligns}:\${i}-\${i}\\\"></job>" >> jobs
+    done
+    split -nr/$split_count jobs job. -da 3
+    lines_per_file=10
     """
 }
 
@@ -128,8 +130,10 @@ process run_chainer {
     """
 
     stub:
+        job_num = job.toString().tokenize('.').last().toInteger()
     """
-    #touch output/sample_chainer_wnode.${job_num}.out
+    mkdir -p output
+    touch output/sample_chainer_wnode.${job_num}.out
     """
 }
 
@@ -151,6 +155,7 @@ process run_gpx_make_outputs {
     """
     stub:
     """
+    mkdir -p output
     echo ${files}
     for i in {1..$split_count}; do
         touch output/chains.\$i.out.gz

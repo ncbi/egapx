@@ -17,8 +17,13 @@ process export {
         path annot_builder_output, stageAs: 'annot_builder_output/*'
     output:
         path "*", includeInputs: true
+    script:
     """
     echo "export script"
+    """
+    stub:
+    """
+    echo "export stub"
     """
 }
 

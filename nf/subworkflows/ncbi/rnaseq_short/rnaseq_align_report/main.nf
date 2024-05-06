@@ -50,5 +50,10 @@ process run_align_report {
       -output ./rnaseq_align_report.xml             \
       -run-report-output '@-RS_2023_11_rnaseq_runs.txt' 
     """
+    stub:
+    """
+    touch rnaseq_align_report.xml
+    touch stub_report_runs.txt
+    """
 }
 

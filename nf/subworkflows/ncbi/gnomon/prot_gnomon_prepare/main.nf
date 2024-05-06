@@ -30,7 +30,9 @@ process prot_gnomon_prepare_p {
     """
     stub:
     """
-    touch out_file
+    touch LDS2
+    touch prot_ids.seq_id
+    touch nuc_ids.seq_id
     """
 }
 

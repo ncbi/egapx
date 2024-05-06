@@ -24,4 +24,10 @@ process run_annotwriter {
     mkdir -p output
     annotwriter -i ${accept_asn_file} -nogenbank -format gff3 -o output/accept.gff
     """
+
+    stub:
+    """
+    mkdir -p output
+    touch output/accept.gff
+    """
 }
