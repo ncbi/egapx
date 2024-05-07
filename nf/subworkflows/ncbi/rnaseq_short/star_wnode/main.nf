@@ -6,6 +6,7 @@ include { merge_params } from '../../utilities'
 
 process exec {
     label 'huge_job'
+    label 'long_job'
     input:
         path seqid_list
         tuple val(sampleID), path(fasta_rna_file)
@@ -39,7 +40,9 @@ process exec {
     fastq=\$(which fasterq-dump)
     star_wnode $parameters -input-jobs jobfile -genome-sequences-manifest seqid_list.mft -fastq-executable \$fastq  -samtools-executable \$samtools -star-executable \$star -output-dir . -work-area wrkarea -O out -lds2 genome/lds2.db
     """
+    
     stub:
+        assembly=genome_file.baseName.toString().replaceFirst(/\.(fa(sta)?|asn[bt]?)$/, "")
     """
     touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam
     touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam.bai

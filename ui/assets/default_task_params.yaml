@@ -51,7 +51,7 @@ tasks:
       50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None'
       -preserve-star-logs
   miniprot:
-    miniprot: -t 8 -p 0.4 --outs=0.4 -G 600000
+    miniprot: -t 31 -p 0.4 --outs=0.4 -G 600000
   paf2asn:
     paf2asn: -prosplign-refinement
   best_aligned_prot:
@@ -60,3 +60,5 @@ tasks:
     align_sort:  -ifmt seq-align  -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   align_filter_sa:
     align_filter:  -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  
+  gnomon_training:
+    gnomon_training: -maxintron 1200000 -asn -b

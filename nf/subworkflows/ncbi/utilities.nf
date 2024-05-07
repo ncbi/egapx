@@ -131,6 +131,10 @@ process clean_fasta_ids {
     base64 -d ./reol.b64 > ./reol.py
     cat ${fasta_in} | python reol.py > ./fasta_out
     """
+    stub:
+    """
+    touch ./fasta.out
+    """
 }
 
 
@@ -149,5 +153,10 @@ process multireader {
     else
          touch output/fasta_file.asnt
     fi
+    """
+    stub:
+    """
+        mkdir -p output
+        touch output/fasta_file.asnt
     """
 }

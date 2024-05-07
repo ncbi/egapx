@@ -25,6 +25,8 @@ workflow miniprot {
 
 
 process run_miniprot {
+    label 'huge_job'
+    label 'long_job'
     input:
         path fasta_genome_file
         path fasta_proteins_file
@@ -36,5 +38,10 @@ process run_miniprot {
     """
     mkdir -p output
     miniprot ${parameters}  ${fasta_genome_file} ${fasta_proteins_file} > output/aligns.paf
+    """
+    stub:
+    """
+    mkdir -p output
+    touch output/aligns.paf
     """
 }

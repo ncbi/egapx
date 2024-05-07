@@ -35,4 +35,9 @@ process run_paf2asn {
     lds2_indexer -source LDS_Index
     paf2asn ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank -input ${paf_file} -o output/align.asn
     """
+    stub:
+    """
+    mkdir -p output
+    touch output/align.asn
+    """
 }

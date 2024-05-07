@@ -40,4 +40,11 @@ process run_align_filter_sa {
     lds2_indexer -source LDS_Index
     align_filter ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank -input $asn_file -output output/align.asn -non-match-output output/align-nomatch.asn -report-output output/report.txt 
     """
+    stub:
+    """
+    mkdir -p output
+    touch output/align.asn
+    touch output/align-nomatch.asn
+    touch output/report.txt
+    """
 }

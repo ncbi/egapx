@@ -37,4 +37,9 @@ process run_align_sort {
     echo "${alignments.join('\n')}" > alignments.mft
     align_sort  $parameters -input-manifest alignments.mft  -o output/sorted_aligns.asn  -lds2 LDS_Index/lds2.db
     """
+    stub:
+    """
+    mkdir -p output
+    touch output/sorted_aligns.asn
+    """
 }

@@ -62,6 +62,26 @@ process get_genome_info {
 
     #TODO: subtract organelles from list
     """
+    
+    stub:
+        base_name_stripped = fasta_genome_file.baseName.toString().replaceAll(/\.(fa(sta)?|fna)(\.gz)?$/, "")
+        indexed_fasta_name = fasta_genome_file.baseName.toString().replaceFirst(/\.(fa(sta)?|fna)(\.gz)?$/, ".fasta")
+        if (! indexed_fasta_name.endsWith(".fasta")) {
+            indexed_fasta_name += ".fasta"
+        }
+        genome_dir = "genome"
+        fasta_dir = "fasta"
+        out_fasta = fasta_dir + "/" + indexed_fasta_name
+        genome_asn = genome_dir + "/" + base_name_stripped + ".asn"
+ 
+    """
+    mkdir -p $genome_dir
+    mkdir -p $fasta_dir
+    touch $out_fasta
+    touch $genome_asn
+    touch gencoll.asn
+    touch list.seqids
+    """
 }
 
 
@@ -102,4 +122,20 @@ process convert_proteins {
     fi
     multireader -flags ParseRawID -out-format asn_text -input ${out_fasta} -output ${proteins_asn}
     """
+
+    stub:
+        base_name_stripped = fasta_proteins_file.baseName.toString().replaceAll(/\.(fa(sta)?|faa)(\.gz)?$/, "")
+        fasta_name = base_name_stripped + ".faa"
+        asn_dir = "asn"
+        fasta_dir = "fasta"
+        out_fasta = fasta_dir + "/" + fasta_name
+        proteins_asn = asn_dir + "/" + base_name_stripped + ".asn"
+    
+    """
+    mkdir -p $asn_dir
+    mkdir -p $fasta_dir
+    touch $out_fasta
+    touch $proteins_asn
+    """
+
 }

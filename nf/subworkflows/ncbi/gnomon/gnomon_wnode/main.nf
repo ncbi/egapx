@@ -59,6 +59,15 @@ process gpx_qsubmit {
     fi
     split -nr/\$effective_njobs jobs job. -da 3
     """
+    stub:
+        njobs=16
+    """
+    for i in {1..$njobs}; do
+        echo j.\${i} >> jobs
+    done
+    split -nr/$njobs jobs job. -da 3
+    lines_per_file=10
+    """
 }
 
 
@@ -74,8 +83,9 @@ process annot {
         val lines_per_file
         val params
     output:
-        path "outdir/*"
+        path "output/*"
     script:
+        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     njobs=`wc -l <$jobs`
     if [ \$njobs -lt 16 ]; then
@@ -114,12 +124,18 @@ process annot {
     # extension as a prefix to the filename.
     mkdir interim
     annot_wnode $params -nogenbank -lds2 \$lds2  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -param $hmm_params -O interim || true
-    mkdir outdir
+    mkdir output
     for f in interim/*; do
         if [ -f \$f ]; then
-            mv \$f outdir/\${extension}_\$(basename \$f)
+            mv \$f output/\${extension}_\$(basename \$f)
         fi
     done
+    """
+    stub:
+        job_num = jobs.toString().tokenize('.').last().toInteger()
+    """
+    mkdir -p output
+    touch output/sample_gnomon_wnode.${job_num}.out
     """
 }
 
@@ -133,5 +149,9 @@ process gpx_qdump {
     script:
     """
     gpx_qdump $params -input-path inputs -output gnomon_wnode.out
+    """
+    stub:
+    """
+    touch gnomon_wnode.out
     """
 }

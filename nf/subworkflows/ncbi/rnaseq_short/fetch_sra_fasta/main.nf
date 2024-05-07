@@ -29,6 +29,11 @@ process read_sra_file {
     exitvar=()
     while read -r line; do  [[ \$line = \\#* ]] && continue; exitvar+=(\"\$line\"); done < ${sra_run_file}
     """
+
+    stub:
+    """
+    exitvar=SRA000001
+    """
 }
 
 
@@ -45,6 +50,14 @@ process run_fetch_sra_fasta {
     rm -f ${sra}
     mkdir output
     mv ${sra}_1.fasta output/${sra}.1
-    [ -f ${sra}_2.fasta ] && mv ${sra}_2.fasta output/${sra}.2
+    if [ -f ${sra}_2.fasta ]; then
+        mv ${sra}_2.fasta output/${sra}.2
+    fi
+    """
+    stub:
+    """
+    mkdir -p output
+    touch output/${sra}.1
+    touch output/${sra}.2
     """
 }

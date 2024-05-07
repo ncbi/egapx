@@ -73,6 +73,10 @@ process annot_builder_main {
         print('report_dir = "$outdir/REPORT"', file=outf)
         print('test_dir = "$outdir/TEST"', file=outf)
     """
+    stub:
+    """
+        touch annot_builder_main.ini
+    """
 }
 
 
@@ -129,6 +133,11 @@ process annot_builder_input {
         print('merge_variants = "1"', file=outf)
         print('use_secondary_support = "1"', file=outf)
     """
+    stub:
+    """
+        touch annot_builder_input.ini
+        touch input_manifest_${provider_number}.mft
+    """
 }
 
 
@@ -156,5 +165,16 @@ process annot_builder_run {
     lds2_indexer -source genome/ -db LDS2
     # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
     annot_builder -accept-output both -nogenbank -lds2 LDS2 -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
+    """
+    stub:
+    """
+    mkdir -p $outdir/ACCEPT
+    mkdir -p $outdir/COLLECTION
+    mkdir -p $outdir/CONFLICT
+    mkdir -p $outdir/REPORT
+    mkdir -p $outdir/TEST
+    
+    touch ${outdir}/annot_builder.log
+    touch ${outdir}/accept.asn
     """
 }

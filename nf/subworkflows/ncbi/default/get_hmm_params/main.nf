@@ -93,12 +93,22 @@ process run_get_hmm {
             return ""
         # print(best_lineage)
         # print(best_taxid, best_score)
-        return f'https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/gnomon/hmm_parameters/{best_taxid}.params'
-
-    print(get_closest_hmm(${taxid}))
+        return ( best_taxid,  f'https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/gnomon/hmm_parameters/{best_taxid}.params')
+        
+    (t, url) = get_closest_hmm(${taxid})
+    print(t)
+    print(url)
     """
     stub:
     """
-    echo ${taxid}
+    r=\$RANDOM
+    flip=\$(( r % 2 ))
+    if [ "\$flip" -eq "0" ]
+    then
+        r=${taxid}
+    fi
+    touch \${r}.params
+    echo \$r
+    echo "file:///\${r}.params"
     """
 }

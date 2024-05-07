@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # requires pip install pyyaml
 
+import shlex
 import shutil
 import sys
 import os
@@ -10,6 +11,7 @@ import tempfile
 import re
 from collections import defaultdict
 from pathlib import Path
+from typing import List
 from urllib.request import urlopen
 import json
 import yaml
@@ -21,12 +23,13 @@ VERBOSITY_VERBOSE=1
 def parse_args(argv):
     parser = argparse.ArgumentParser(description="Main script for EGAPx")
     parser.add_argument("filename", help="YAML file with input: section with at least genome: and reads: parameters")
-    parser.add_argument("-e", "--executor", help="Nextflow executor, one of local, docker, aws. Uses corresponding Nextflow config file", default="local")
+    parser.add_argument("-o", "--output", help="Output path", required=True, default="")
+    parser.add_argument("-e", "--executor", help="Nextflow executor, one of docker, singularity, aws, or local (for NCBI internal use only). Uses corresponding Nextflow config file", default="local")
     parser.add_argument("-c", "--config-dir", help="Directory for executor config files, default is ./egapx_config. Can be also set as env EGAPX_CONFIG_DIR", default="")
-    parser.add_argument("-o", "--output", help="Output path", default="")
     parser.add_argument("-w", "--workdir", help="Working directory for cloud executor", default="")
     parser.add_argument("-r", "--report", help="Report file prefix for report (.report.html) and timeline (.timeline.html) files, default is in output directory", default="")
     parser.add_argument("-n", "--dry-run", action="store_true", default=False)
+    parser.add_argument("-st", "--stub-run", action="store_true", default=False)
     parser.add_argument("-q", "--quiet", dest='verbosity', action='store_const', const=VERBOSITY_QUIET, default=VERBOSITY_DEFAULT)
     parser.add_argument("-v", "--verbose", dest='verbosity', action='store_const', const=VERBOSITY_VERBOSE, default=VERBOSITY_DEFAULT)
     parser.add_argument("-fn", "--func_name", help="func_name", default="")
@@ -71,15 +74,17 @@ def convert_paths(run_inputs):
                 input_root[key] = [convert_value(v) for v in input_root[key]]
             else:
                 input_root[key] = convert_value(input_root[key])
-    run_inputs['output'] = convert_value(run_inputs['output'])
+    if 'output' in run_inputs:
+        run_inputs['output'] = convert_value(run_inputs['output'])
 
 
 def generate_reads_metadata(run_inputs):
     "Generate reads metadata file with minimal information - paired/unpaired and valid for existing libraries"
-    if 'reads' not in run_inputs['input']:
+    if 'reads' not in run_inputs['input'] or 'output' not in run_inputs:
         return None
+    output = run_inputs['output']
     prefixes = defaultdict(list)
-    with tempfile.NamedTemporaryFile(mode='w', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=output, prefix='egapx_reads_metadata_', suffix='.tsv') as f:
         for rf in run_inputs['input']['reads']:
             mo = re.match(r'([A-Za-z0-9]+)([^A-Za-z0-9].*)', Path(rf).parts[-1])
             if mo:
@@ -100,11 +105,11 @@ def validate_params(run_inputs):
     success = True
     has_genome = 'genome' in inputs
     has_rnaseq = 'reads' in inputs or 'reads_ids' in inputs or 'reads_query' in inputs
-    has_hmm = 'hmm' in inputs or 'taxid' in inputs
-    has_proteins = 'proteins' in inputs
-    if not has_genome or not has_hmm or not (has_rnaseq or has_proteins):
-        print("Missing parameter: 'genome', 'hmm', and either 'proteins', or 'reads' should be specified")
-        print("  proteins and hmm can be indirectly specified by 'taxid'")
+    has_taxid = 'taxid' in inputs
+    has_proteins = 'proteins' in inputs or ('taxid' in inputs and get_closest_protein_bag(inputs['taxid']))
+    if not has_genome or not has_taxid or not (has_rnaseq or has_proteins):
+        print("Missing parameter: 'genome', 'taxid', and either 'proteins', or 'reads' should be specified")
+        print("  proteins can be indirectly specified by 'taxid'")
         success = False
     return success
 
@@ -208,6 +213,48 @@ def get_closest_protein_bag(taxid):
     return f'https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/target_proteins/{best_taxid}.faa.gz'
 
 
+def to_dict(x: List[str]):
+    d = {}
+    s = len(x)
+    i = 0
+    while i < s:
+        el = x[i]
+        i += 1
+        if el and el[0] == '-':
+            if i < s:
+                v = x[i]
+                if v and (v[0] != '-'  or (v[0] == '-' and ' ' in v)):
+                    d[el] = v
+                    i += 1
+                else:
+                    d[el] = ""
+            else:
+                d[el] = ""
+        else:
+            d[el] = ""
+    return d
+
+def merge_params(task_params, run_inputs):
+    # Walk over the keys in run_inputs and merge them into task_params
+    for k in run_inputs.keys():
+        if k in task_params:
+            if isinstance(task_params[k], dict) and isinstance(run_inputs[k], dict):
+                task_params[k] = merge_params(task_params[k], run_inputs[k])
+            else:
+                task_params_dict = to_dict(shlex.split(task_params[k]))
+                run_inputs_dict = to_dict(shlex.split(run_inputs[k]))
+                task_params_dict.update(run_inputs_dict)
+                task_params_list = []
+                for k1, v in task_params_dict.items():
+                    task_params_list.append(k1)
+                    if v:
+                        task_params_list.append(v)
+                task_params[k] = shlex.join(task_params_list)
+        else:
+            task_params[k] = run_inputs[k]
+    return task_params
+
+
 def main(argv):
     "Main script for EGAPx"
     #warn user that this is an alpha release
@@ -233,7 +280,7 @@ def main(argv):
     run_inputs = repackage_inputs(yaml.safe_load(open(args.filename, 'r')))
 
     # Check for proteins input and if empty or no input at all, add closest protein bag
-    if ('proteins' not in run_inputs['input'] or not run_inputs['input']['proteins']) and 'taxid' in run_inputs['input']:
+    if 'proteins' not in run_inputs['input'] and 'taxid' in run_inputs['input']:
         run_inputs['input']['proteins'] = get_closest_protein_bag(run_inputs['input']['taxid'])
 
     # Command line overrides manifest input
@@ -245,13 +292,14 @@ def main(argv):
     # Convert inputs to absolute paths
     convert_paths(run_inputs)
 
+    # Create output directory if needed
+    os.makedirs(run_inputs['output'], exist_ok=True)
+
     # Add reads_metadata.tsv file
-    new_reads_metadata = generate_reads_metadata(run_inputs)
-    if new_reads_metadata:
-        files_to_delete.append(new_reads_metadata)
+    generate_reads_metadata(run_inputs)
 
     # Add to default task parameters, if input file has some task parameters they will override the default
-    task_params.update(run_inputs)
+    task_params = merge_params(task_params, run_inputs)
 
     # Move output from YAML file to arguments to have more transparent Nextflow log
     output = task_params['output']
@@ -274,6 +322,8 @@ def main(argv):
     else:
         main_nf = Path(script_directory) / '..' / 'nf' / 'ui.nf'
     nf_cmd = ["nextflow", "-C", config_file, "-log", f"{output}/nextflow.log", "run", main_nf, "--output", output]
+    if args.stub_run:
+        nf_cmd += ["-stub-run"]
     if args.report:
         nf_cmd += ["-with-report", f"{args.report}.report.html", "-with-timeline", f"{args.report}.timeline.html"]
     else:

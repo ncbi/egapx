@@ -16,6 +16,21 @@ process build_index {
     echo "in $genome_file, out $out_dir"
     STAR  $parameters --runMode genomeGenerate --genomeDir $out_dir --genomeFastaFiles $genome_file 
     """
+
+    stub:
+        out_dir = genome_file.toString().replaceFirst(/\.(fa(sta)?|fna)$/, ".index")
+    """
+    mkdir -p ${out_dir}
+    touch ${out_dir}/Genome
+    touch ${out_dir}/Log.out
+    touch ${out_dir}/SA
+    touch ${out_dir}/SAindex
+    touch ${out_dir}/chrLength.txt
+    touch ${out_dir}/chrName.txt
+    touch ${out_dir}/chrNameLength.txt
+    touch ${out_dir}/chrStart.txt
+    touch ${out_dir}/genomeParameters.txt
+    """
 }
 
 

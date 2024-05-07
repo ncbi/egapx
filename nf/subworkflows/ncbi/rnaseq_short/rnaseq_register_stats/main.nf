@@ -52,5 +52,10 @@ process register_stats {
 
     ls -l 
     """
+
+    stub:
+    """
+    touch run_stats.tsv
+    """
 }
 

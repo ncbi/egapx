@@ -13,7 +13,7 @@ include { bam_strandedness } from './rnaseq_short/bam_strandedness/main'
 include { bam_bin_and_sort } from './rnaseq_short/bam_bin_and_sort/main'
 include { bam2asn } from './rnaseq_short/convert_from_bam/main'
 include { rnaseq_collapse } from './rnaseq_short/rnaseq_collapse/main'
-include { get_hmm_params } from './default/get_hmm_params/main'
+include { get_hmm_params; run_get_hmm } from './default/get_hmm_params/main'
 include { chainer_wnode as chainer } from './gnomon/chainer_wnode/main'
 include { gnomon_wnode } from './gnomon/gnomon_wnode/main'
 include { prot_gnomon_prepare } from './gnomon/prot_gnomon_prepare/main'
@@ -24,6 +24,7 @@ include { align_filter_sa } from './target_proteins/align_filter_sa/main'
 include { best_aligned_prot } from './target_proteins/best_aligned_prot/main'
 include { paf2asn } from './target_proteins/paf2asn/main'
 include { run_align_sort} from './gnomon/align_sort_sa/main'
+include { gnomon_training_iterations; gnomon_no_training } from './gnomon-training-iteration/main'
 
 params.intermediate = false
 
@@ -88,7 +89,7 @@ workflow egapx {
             }
             //
 
-            bam_strandedness(ch_align, ch_align_index, sra_metadata, task_params.get('bam_strandedness', [:]))
+            bam_strandedness(ch_align.collect(), sra_metadata, task_params.get('bam_strandedness', [:]))
             def strandedness = bam_strandedness.out.strandedness
             
             // Run bam_bin_and_sort
@@ -121,7 +122,21 @@ workflow egapx {
         if (hmm_params) {
             effective_hmm = hmm_params
         } else {
-            effective_hmm = get_hmm_params(tax_id, [:])
+            tmp_hmm = run_get_hmm(tax_id)
+            b = tmp_hmm | splitText( { it.split('\n') } ) | flatten | collect
+            c = b | branch { n ->
+                    exact: n[0] == tax_id.toString()
+                        return n[1]
+                    closest:  n[0] != tax_id.toString()
+                        return n[1]
+                }
+            hmm_params_closest = gnomon_training_iterations(c.closest, genome_asn, proteins_asn ,alignments , /* evidence_denylist */ [], /* gap_fill_allowlist */ [],
+               /* trusted_genes */ [], scaffolds, softmask,
+               softmask, scaffolds, task_params.get('chainer', [:]), task_params.get('gnomon', [:]), task_params.get('gnomon_training', [:]))
+            hmm_params_exact = gnomon_no_training (c.exact)
+            tmp_channel1 = Channel.of() 
+            tmp_channel2 =  tmp_channel1.concat(hmm_params_closest) 
+            effective_hmm =  tmp_channel2.concat(hmm_params_exact)
         }
 
         chainer(alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, /* trusted_genes */ [], genome_asn, proteins_asn, task_params.get('chainer', [:]))
