@@ -126,7 +126,7 @@ Input to EGAPx is in the form of a YAML file.
 
 - Run EGAPx for the first time to copy the config files so you can edit them:
   ```
-  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml  
+  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -o example_out 
   ```
   - When you run `egapx.py` for the first time it copies the template config files to the directory `./egapx_config`.
   - You will need to edit these templates to reflect the actual parameters of your setup.
