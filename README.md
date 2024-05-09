@@ -144,6 +144,8 @@ Input to EGAPx is in the form of a YAML file.
     - use `-e aws` for AWS batch using Docker image
     - use `-e docker` for using Docker image
     - use `-e singularity` for using the Singularity image
+    - use '-e slurm` for using SLURM in your HPC.
+        - Note that for this option, you have to edit `./egapx_config/slurm.config` according to your cluster specifications.
     - type `python3 ui/egapx.py  -h ` for the help menu 
 
       ```
