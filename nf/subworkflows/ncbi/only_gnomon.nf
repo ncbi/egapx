@@ -5,7 +5,7 @@
 nextflow.enable.dsl=2
 
 include { setup_genome; setup_proteins } from './setup/main'
-include { get_hmm_params } from './default/get_hmm_params/main'
+include { get_hmm_params; run_get_hmm } from './default/get_hmm_params/main'
 include { chainer_wnode as chainer } from './gnomon/chainer_wnode/main'
 include { gnomon_wnode } from './gnomon/gnomon_wnode/main'
 include { prot_gnomon_prepare } from './gnomon/prot_gnomon_prepare/main'
@@ -67,7 +67,10 @@ workflow only_gnomon {
         if (hmm_params) {
             effective_hmm = hmm_params
         } else {
-            effective_hmm = get_hmm_params(tax_id, [:])
+            tmp_hmm = run_get_hmm(tax_id)
+            b = tmp_hmm | splitText( { it.split('\n') } ) | flatten 
+            c = b | last
+            effective_hmm = c
         }
 
         chainer(alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, /* trusted_genes */ [], genome_asn, proteins_asn, task_params.get('chainer', [:]))
