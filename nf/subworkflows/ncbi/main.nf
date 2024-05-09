@@ -135,8 +135,9 @@ workflow egapx {
                softmask, scaffolds, task_params.get('chainer', [:]), task_params.get('gnomon', [:]), task_params.get('gnomon_training', [:]))
             hmm_params_exact = gnomon_no_training (c.exact)
             tmp_channel1 = Channel.of() 
-            tmp_channel2 =  tmp_channel1.concat(hmm_params_closest) 
-            effective_hmm =  tmp_channel2.concat(hmm_params_exact)
+            tmp_channel2 = tmp_channel1.concat(hmm_params_closest) 
+            tmp_channel3 = tmp_channel2.concat(hmm_params_exact)
+            effective_hmm = tmp_channel3 | last
         }
 
         chainer(alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, /* trusted_genes */ [], genome_asn, proteins_asn, task_params.get('chainer', [:]))
