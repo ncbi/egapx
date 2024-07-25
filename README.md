@@ -4,7 +4,14 @@ EGAPx is the publicly accessible version of the updated NCBI [Eukaryotic Genome 
 
 EGAPx takes an assembly fasta file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. The final annotation for the input assembly is produced as a `gff` file. 
 
-We currently have protein datasets posted for most vertebrates (mammals, sauropsids, ray-finned fishes), hymenoptera, diptera, lepidoptera and choleoptera. We will be adding datasets for more arthropods, vertebrates and plants in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
+We currently have protein datasets posted that are suitable for most vertebrates and arthropods:
+  - Chordata - Mammalia, Sauropsida, Actinopterygii (ray-finned fishes)
+  - Insecta - Hymenoptera, Diptera, Lepidoptera, Coleoptera, Hemiptera 
+  - Arthropoda - Arachnida, other Arthropoda
+
+We will be adding datasets for plants and other invertebrates in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
+
+We currently have protein datasets posted for most vertebrates (mammals, sauropsids, ray-finned fishes) and arthropods. We will be adding datasets for more arthropods, vertebrates and plants in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
 
 **Warning:**
 The current version is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use. Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues)  if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.  
@@ -41,23 +48,46 @@ Notes:
 
 Input to EGAPx is in the form of a YAML file. 
 
-- The following two are the _required_ key-value pairs for the input file:
+- The following are the _required_ key-value pairs for the input file:
 
   ```
   genome: path to assembled genome in FASTA format
   taxid: NCBI Taxonomy identifier of the target organism 
+  reads: RNA-seq data
   ```
   You can obtain taxid from the [NCBI Taxonomy page](https://www.ncbi.nlm.nih.gov/taxonomy).
 
 
-- The following are the _optional_ key-value pairs for the input file:
+  - RNA-seq data can be supplied in any one of the following ways:
 
-  - RNA-seq data. Use one of the following options:
     ```
-    reads: [ array of paths to reads FASTA files]
-    reads_ids: [ array of SRA run ids ]
-    reads_query: query for reads SRA
+    reads: [ array of paths to reads FASTA or FASTQ files]
+    reads: [ array of SRA run IDs ]
+    reads: [SRA Study ID]
+    reads: SRA query for reads
     ```
+  - If you are using your local reads, then the FASTA/FASTQ headers need to be in the following format:
+    ```
+    head SRR8506572_1.fasta| grep ">"
+    >SRR8506572.1.1
+    >SRR8506572.2.1
+  
+    head SRR8506572_2.fasta| grep ">"
+    >SRR8506572.1.2
+    >SRR8506572.2.2
+  
+    head SRR8506572_2.fastq| grep "@"
+    @SRR8506572.1.2
+    @SRR8506572.2.2
+  
+    head SRR8506572_1.fastq| grep "@"
+    @SRR8506572.1.1
+    @SRR8506572.2.1
+    ```
+
+  - If you provide an SRA Study ID, all the SRA run ID's belonging to that Study ID will be included in the EGAPx run.    
+
+- The following are the _optional_ key-value pairs for the input file:  
 
   - A protein set. A taxid-based protein set will be chosen if no protein set is provided.
     ```
@@ -86,19 +116,19 @@ Input to EGAPx is in the form of a YAML file.
     - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/data/Dermatophagoides_farinae_small/SRR9005248.2
   ```
 
-- To specify an array of NCBI SRA datasets using `reads_ids:`
+- To specify an array of NCBI SRA datasets:
    ```
-   reads_ids:
+   reads:
      - SRR8506572
      - SRR9005248
    ```
 
-- To specify an SRA entrez query using `reads_query:`
+- To specify an SRA entrez query:
     ```
-    reads_query: 'txid6954[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession] AND (SRR8506572[Accession] OR SRR9005248[Accession] )'
+    reads: 'txid6954[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession] AND (SRR8506572[Accession] OR SRR9005248[Accession] )'
     ```
 
-  **Note:** Both the above examples `reads_ids` and `reads_query` will have more RNA-seq data than the `input_D_farinae_small.yaml` example. To make sure the `reads_query` does not produce a large number of SRA runs, please run it first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and use the `reads_ids` option.   
+  **Note:** Both the above examples will have more RNA-seq data than the `input_D_farinae_small.yaml` example. To make sure the entrez query does not produce a large number of SRA runs, please run it first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and list it in the input yaml.   
 
 - First, test EGAPx on the example provided (`input_D_farinae_small.yaml`, a dust mite) to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_tellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.  
 
@@ -144,40 +174,57 @@ Input to EGAPx is in the form of a YAML file.
     - use `-e aws` for AWS batch using Docker image
     - use `-e docker` for using Docker image
     - use `-e singularity` for using the Singularity image
-    - use `-e slurm` for using SLURM in your HPC.
+    - use `-e biowulf_cluster` for Biowulf cluster using Singularity image
+    - use '-e slurm` for using SLURM in your HPC.
         - Note that for this option, you have to edit `./egapx_config/slurm.config` according to your cluster specifications.
     - type `python3 ui/egapx.py  -h ` for the help menu 
 
       ```
-      $ ./egapx.py  -h
-
+      $ ui/egapx.py  -h
+      
+      
       !!WARNING!!
       This is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use.
 
-      usage: egapx.py [-h] [-e EXECUTOR] [-c CONFIG_DIR] [-o OUTPUT] [-w WORKDIR] [-r REPORT] [-n] [-q] [-v] [-fn FUNC_NAME] filename
+      usage: egapx.py [-h] [-o OUTPUT] [-e EXECUTOR] [-c CONFIG_DIR] [-w WORKDIR] [-r REPORT] [-n] [-st]
+                [-so] [-dl] [-lc LOCAL_CACHE] [-q] [-v] [-fn FUNC_NAME]
+                [filename]
 
       Main script for EGAPx
-
-      positional arguments:
-        filename              YAML file with input: section with at least genome: and reads: parameters
 
       optional arguments:
         -h, --help            show this help message and exit
         -e EXECUTOR, --executor EXECUTOR
-                              Nextflow executor, one of local, docker, aws. Uses corresponding Nextflow config file
+                        Nextflow executor, one of docker, singularity, aws, or local (for NCBI
+                        internal use only). Uses corresponding Nextflow config file
         -c CONFIG_DIR, --config-dir CONFIG_DIR
-                              Directory for executor config files, default is ./egapx_config. Can be also set as env EGAPX_CONFIG_DIR
-        -o OUTPUT, --output OUTPUT
-                              Output path
+                        Directory for executor config files, default is ./egapx_config. Can be also
+                        set as env EGAPX_CONFIG_DIR
         -w WORKDIR, --workdir WORKDIR
-                              Working directory for cloud executor
+                        Working directory for cloud executor
         -r REPORT, --report REPORT
-                              Report file prefix for report (.report.html) and timeline (.timeline.html) files, default is in output directory
+                        Report file prefix for report (.report.html) and timeline (.timeline.html)
+                        files, default is in output directory
         -n, --dry-run
+        -st, --stub-run
+        -so, --summary-only   Print result statistics only if available, do not compute result
+        -lc LOCAL_CACHE, --local-cache LOCAL_CACHE
+                        Where to store the downloaded files
         -q, --quiet
         -v, --verbose
         -fn FUNC_NAME, --func_name FUNC_NAME
                         func_name
+
+      run:
+        filename              YAML file with input: section with at least genome: and reads: parameters
+        -o OUTPUT, --output OUTPUT
+                        Output path
+
+      download:
+        -dl, --download-only  Download external files to local storage, so that future runs can be
+                        isolated
+
+      
       ```
 
 
@@ -270,15 +317,68 @@ $ aws s3 ls s3://temp_datapath/D_farinae/96/621c4ba4e6e87a4d869c696fe50034/outpu
 2024-03-27 11:20:24   17127134 aligns.paf
 ```
 
+## Offline mode
+
+If you do not have internet access from your cluster, you can run EGAPx in offline mode. To do this, you would first pull the Singularity image, then download the necessary files from NCBI FTP using `egapx.py` script, and then finally use the path of the downloaded folder in the run command. Here is an example of how to download the files and execute EGAPx in the Biowulf cluster. 
+
+
+- Download the Singularity image:
+```
+rm egap*sif
+singularity cache clean
+singularity pull docker://ncbi/egapx:0.2-alpha
+```
+
+- Clone the repo:
+```
+git clone https://github.com/ncbi/egapx.git
+cd egapx
+```
+
+- Download EGAPx related files from NCBI:
+```
+python3 ui/egapx.py -dl -lc ../local_cache
+```
+
+- Download SRA reads:
+```
+prefetch SRR8506572
+prefetch SRR9005248
+fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\$ac.\$si.\$ri" --fasta -O sradir/  ./SRR8506572
+fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\$ac.\$si.\$ri" --fasta -O sradir/  ./SRR9005248
+
+```
+You should see downloaded files inside the 'sradir' folder":
+```
+ls  sradir/
+SRR8506572_1.fasta  SRR8506572_2.fasta  SRR9005248_1.fasta  SRR9005248_2.fasta
+```
+Now edit the file paths of SRA reads files in `examples/input_D_farinae_small.yaml` to include the above SRA files. 
+
+- Run `egapx.py` first to edit the `biowulf_cluster.config`:
+```
+ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
+echo "process.container = '/path_to_/egapx_0.2-alpha.sif'" >> egapx_config/biowulf_cluster.config
+```
+
+- Run `egapx.py`:
+```
+ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
+
+```
+
+
 ## References
 
-Barnett DW, Garrison EK, Quinlan AR, Strömberg MP, Marth GT. BamTools: a C++ API and toolkit for analyzing and managing BAM files. Bioinformatics. 2011 Jun 15;27(12):1691-2. doi: 10.1093/bioinformatics/btr174. Epub 2011 Apr 14. PMID: 21493652; PMCID: PMC3106182.
+Buchfink B, Reuter K, Drost HG. Sensitive protein alignments at tree-of-life scale using DIAMOND. Nat Methods. 2021 Apr;18(4):366-368. doi: 10.1038/s41592-021-01101-x. Epub 2021 Apr 7. PMID: 33828273; PMCID: PMC8026399.
 
 Danecek P, Bonfield JK, Liddle J, Marshall J, Ohan V, Pollard MO, Whitwham A, Keane T, McCarthy SA, Davies RM, Li H. Twelve years of SAMtools and BCFtools. Gigascience. 2021 Feb 16;10(2):giab008. doi: 10.1093/gigascience/giab008. PMID: 33590861; PMCID: PMC7931819.
 
 Dobin A, Davis CA, Schlesinger F, Drenkow J, Zaleski C, Jha S, Batut P, Chaisson M, Gingeras TR. STAR: ultrafast universal RNA-seq aligner. Bioinformatics. 2013 Jan 1;29(1):15-21. doi: 10.1093/bioinformatics/bts635. Epub 2012 Oct 25. PMID: 23104886; PMCID: PMC3530905.
 
 Li H. Protein-to-genome alignment with miniprot. Bioinformatics. 2023 Jan 1;39(1):btad014. doi: 10.1093/bioinformatics/btad014. PMID: 36648328; PMCID: PMC9869432.
+
+Shen W, Le S, Li Y, Hu F. SeqKit: A Cross-Platform and Ultrafast Toolkit for FASTA/Q File Manipulation. PLoS One. 2016 Oct 5;11(10):e0163962. doi: 10.1371/journal.pone.0163962. PMID: 27706213; PMCID: PMC5051824.
 
 
 
