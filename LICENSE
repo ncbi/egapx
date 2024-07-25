@@ -43,10 +43,15 @@ Authors:  Dana-Farber Cancer Institute
 License:  MIT License
           [https://github.com/lh3/miniprot/blob/master/LICENSE.txt]
 
-Location: img/gp/third-party/bamtools
-Authors:  Derek Barnett, Erik Garrison, Gabor Marth, Michael Stromberg
+Location: img/gp/third-party/diamond
+Authors:  Benjamin Buchfink
+License:  GNU GENERAL PUBLIC LICENSE
+          [https://github.com/bbuchfink/diamond/blob/master/LICENSE]
+
+Location: img/gp/third-party/seqkit
+Authors:  Wei Shen
 License:  MIT License
-          [https://github.com/pezmaster31/bamtools/blob/master/LICENSE]
+          [https://github.com/shenwei356/seqkit/blob/master/LICENSE]
 
 ================================================================================
 

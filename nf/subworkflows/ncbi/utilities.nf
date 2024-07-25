@@ -44,18 +44,18 @@ def List<String> shellSplit(CharSequence s) {
 // Convert a parameter list into a map
 def Map<String, String> to_map(List<String> list )
 {
-    map = [:]
-    s = list.size()
-    i = 0
+    def map = [:]
+    def s = list.size()
+    def i = 0
     while (i < s)
     {
-        elem = list.get(i)
+        def elem = list.get(i)
         i = i + 1
         if (elem.size() > 0 && elem[0] == '-')
         {
             if (i < s) {
-                val = list.get(i)
-                if (val.size() > 0 && (val[0] != '-'  || (val[0] == '-' &&  val.contains(' '))))
+                def val = list.get(i)
+                if ( val.size() > 0 && (val[0] != '-' || val.contains(' ')) )
                 {
                     map[elem] = val
                     i = i + 1
@@ -64,13 +64,13 @@ def Map<String, String> to_map(List<String> list )
                 }
             } else {
                 map[elem] = ""
-            } 
+            }
         } else {
-            println("Error: parameter string not well formed")
-            return map 
+            println("Error: parameter string not well formed, map ${map}, elem ${elem}, i ${i}, s ${s}")
+            return map
         }
     }
-    return map 
+    return map
 }
 
 
@@ -102,7 +102,7 @@ def merge_params(default_params, parameters, section_name)
             l << quote(value)
         }
     }
-     
+
     return l.join(" ")
 }
 

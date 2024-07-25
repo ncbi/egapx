@@ -4,35 +4,25 @@
 
 nextflow.enable.dsl=2
 
+include { rnaseq_short_plane } from './rnaseq_short/main'
+include { target_proteins_plane } from './target_proteins/main'
+include { gnomon_plane; post_gnomon_plane } from './gnomon/main'
+include { orthology_plane } from './orthology/main'
 include { setup_genome; setup_proteins } from './setup/main'
-include { sra_query } from './rnaseq_short/sra_qry/main'
-include { fetch_sra_fasta } from './rnaseq_short/fetch_sra_fasta/main'
-include { star_index } from './rnaseq_short/star_index/main'
-include { star_wnode_simplified as star_simplified; star_wnode as star } from './rnaseq_short/star_wnode/main'
-include { bam_strandedness } from './rnaseq_short/bam_strandedness/main'
-include { bam_bin_and_sort } from './rnaseq_short/bam_bin_and_sort/main'
-include { bam2asn } from './rnaseq_short/convert_from_bam/main'
-include { rnaseq_collapse } from './rnaseq_short/rnaseq_collapse/main'
-include { get_hmm_params; run_get_hmm } from './default/get_hmm_params/main'
-include { chainer_wnode as chainer } from './gnomon/chainer_wnode/main'
-include { gnomon_wnode } from './gnomon/gnomon_wnode/main'
-include { prot_gnomon_prepare } from './gnomon/prot_gnomon_prepare/main'
 include { annot_builder } from './default/annot_builder/main'
 include { annotwriter } from './default/annotwriter/main'
-include { miniprot } from './target_proteins/miniprot/main'
-include { align_filter_sa } from './target_proteins/align_filter_sa/main'
-include { best_aligned_prot } from './target_proteins/best_aligned_prot/main'
-include { paf2asn } from './target_proteins/paf2asn/main'
-include { run_align_sort} from './gnomon/align_sort_sa/main'
-include { gnomon_training_iterations; gnomon_no_training } from './gnomon-training-iteration/main'
+
 
 params.intermediate = false
+params.use_orthology = false
+params.use_post_gnomon = false
 
 
 workflow egapx {
     take:
         genome          // path to genome
         proteins        // path to proteins, optional
+
         // Alternative groups of parameters, one of them should be set
         // reads_query - SRA query in the form accepted by NCBI
         // reads_ids - list of SRA IDs
@@ -42,71 +32,48 @@ workflow egapx {
         reads           // path to reads
         reads_metadata  // path to reads metadata 13 tab-delimited fields, 1-st - SRA ID, 3-rd paired or unpaired, everything else - not used, but must be present
                         // 4, 5, 13 - numbers, 5 - non zero number
+
         organelles      // path to organelle list
         // Alternative parameters, one of them should be set
         // tax_id - NCBI tax id of the closest taxon to the genome
         // hmm_params - HMM parameters
         tax_id          // NCBI tax id of the closest taxon to the genome
         hmm_params      // HMM parameters
+        hmm_taxid       // NCBI tax id of the HMM
         //
         softmask        // softmask for GNOMON, optional
+        //
+        max_intron      // max intron length
+        genome_size_threshold // the threshold for calculating actual max intron length
         task_params     // task parameters for every task
     main:
-        def (scaffolds, gencoll_asn, unpacked_genome, genome_asn) = setup_genome(genome, organelles, task_params.get('setup', [:]))
+        print "workflow.container: ${workflow.container}"
+
+        def setup_genome_params = task_params.get('setup', [:])
+        setup_genome_params['max_intron'] = max_intron
+        setup_genome_params['genome_size_threshold'] = genome_size_threshold
+        def (scaffolds, gencoll_asn, unpacked_genome, genome_asn, genome_asnb, eff_max_intron) = setup_genome(genome, organelles, setup_genome_params)
 
         // Protein alignments
         def protein_alignments = []
         def unpacked_proteins
         def proteins_asn = []
+        def proteins_asnb = []
         if (proteins) {
             // miniprot plane
             (unpacked_proteins, proteins_asn) = setup_proteins(proteins, task_params.get('setup', [:]))
-            miniprot(unpacked_genome, unpacked_proteins, task_params.get('miniprot', [:]))
-            paf2asn(genome_asn, proteins_asn, miniprot.out.miniprot_file, task_params.get('paf2asn', [:]))
-            best_aligned_prot(genome_asn, proteins_asn, paf2asn.out.asn_file, gencoll_asn, task_params.get('best_aligned_prot', [:]))
-            align_filter_sa(genome_asn, proteins_asn, best_aligned_prot.out.asn_file, task_params.get('align_filter_sa', [:]))
-            protein_alignments = run_align_sort(genome_asn, proteins_asn,align_filter_sa.out.filtered_file, 
-                "-k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count" )
+            target_proteins_plane(unpacked_genome, genome_asn, gencoll_asn, unpacked_proteins, proteins_asn, eff_max_intron, task_params)
+            protein_alignments = target_proteins_plane.out.protein_alignments
         }
 
         // RNASeq short alignments
         def rnaseq_alignments = []
-        // Satisfy quirks of Nextflow compiler
-        def reads_query1 = reads_query
-        def reads_ids1 = reads_ids
-        // Conditional code on SRA reads source
         if (reads_query || reads_ids || reads) {
-            def index = star_index(unpacked_genome, task_params.get('star_index', [:]))
-            def ch_align, ch_align_index, sra_metadata, sra_run_list
-            if (reads_query || reads_ids) {
-                def query = reads_query1 ? reads_query1 : reads_ids1.join("[Accession] OR ") + "[Accession]"
-                (sra_metadata, sra_run_list) = sra_query(query, task_params.get('sra_qry', [:]))
-                def reads_fasta_pairs = fetch_sra_fasta(sra_run_list, task_params.get('fetch_sra_fasta', [:]))
-                (ch_align, ch_align_index) = star(scaffolds, reads_fasta_pairs, genome_asn, index, task_params.get('star_wnode', [:]))
-            } else {
-                sra_metadata = reads_metadata
-                (ch_align, ch_align_index) = star_simplified(scaffolds, reads, genome_asn, index, task_params.get('star_wnode', [:]))
-            }
-            //
-
-            bam_strandedness(ch_align.collect(), sra_metadata, task_params.get('bam_strandedness', [:]))
-            def strandedness = bam_strandedness.out.strandedness
-            
-            // Run bam_bin_and_sort
-            bam_bin_and_sort(ch_align, ch_align_index, unpacked_genome, organelles, task_params.get('bam_bin_and_sort', [:]))
-            def bam_bins = bam_bin_and_sort.out.sorted
-
-            // Run BAM2ASN
-            bam2asn(bam_bins, strandedness, genome_asn, task_params.get('convert_from_bam', [:]))
-            def asn_align = bam2asn.out.align.collect()
-            def keylist = bam2asn.out.keylist.collect()
-
-            rnaseq_collapse(genome_asn, keylist, asn_align, sra_metadata, 10, task_params.get('rnaseq_collapse', [:]))
-            rnaseq_alignments = rnaseq_collapse.out.alignments
+            rnaseq_short_plane(genome_asn, scaffolds, unpacked_genome, reads_query, reads_ids, reads, reads_metadata, organelles, tax_id, eff_max_intron, task_params) 
+            rnaseq_alignments = rnaseq_short_plane.out.rnaseq_alignments
         }
 
         // Combine RNASeq and protein alignments
-
         def alignments
         if (proteins && (reads_query || reads_ids || reads)) [
             alignments = rnaseq_alignments.combine(protein_alignments)
@@ -118,41 +85,32 @@ workflow egapx {
 
         // GNOMON
 
+        def gnomon_models = []
         def effective_hmm
-        if (hmm_params) {
-            effective_hmm = hmm_params
-        } else {
-            tmp_hmm = run_get_hmm(tax_id)
-            b = tmp_hmm | splitText( { it.split('\n') } ) | flatten | collect
-            c = b | branch { n ->
-                    exact: n[0] == tax_id.toString()
-                        return n[1]
-                    closest:  n[0] != tax_id.toString()
-                        return n[1]
-                }
-            hmm_params_closest = gnomon_training_iterations(c.closest, genome_asn, proteins_asn ,alignments , /* evidence_denylist */ [], /* gap_fill_allowlist */ [],
-               /* trusted_genes */ [], scaffolds, softmask,
-               softmask, scaffolds, task_params.get('chainer', [:]), task_params.get('gnomon', [:]), task_params.get('gnomon_training', [:]))
-            hmm_params_exact = gnomon_no_training (c.exact)
-            tmp_channel1 = Channel.of() 
-            tmp_channel2 = tmp_channel1.concat(hmm_params_closest) 
-            tmp_channel3 = tmp_channel2.concat(hmm_params_exact)
-            effective_hmm = tmp_channel3 | last
+        gnomon_plane(genome_asn, scaffolds, gencoll_asn, proteins_asn, alignments, tax_id, hmm_params, hmm_taxid, softmask, eff_max_intron, task_params) 
+        gnomon_models = gnomon_plane.out.gnomon_models
+
+
+        // outputs 
+        annot_builder(gencoll_asn, gnomon_models, genome_asn, task_params.get('annot_builder', [:]))
+        def accept_annot_file = annot_builder.out.accept_ftable_annot 
+        def annot_files = annot_builder.out.annot_files
+
+        if (params.use_orthology) {
+            // ORTHOLOGY
+            orthology_plane(genome_asnb, gencoll_asn, gnomon_models, annot_files, task_params)
+            def orthologs = orthology_plane.out.orthologs
+            if (params.use_post_gnomon) {
+                //POST GNOMON
+                post_gnomon_plane(gnomon_models, gencoll_asn, orthologs, tax_id, task_params)
+            }
         }
 
-        chainer(alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, /* trusted_genes */ [], genome_asn, proteins_asn, task_params.get('chainer', [:]))
+        annotwriter(accept_annot_file, [:])
+        annotwriter.out.annoted_file     
 
-        gnomon_wnode(scaffolds, chainer.out.chains, chainer.out.chains_slices, effective_hmm, [], softmask, genome_asn, proteins_asn, task_params.get('gnomon', [:]))
-        def models = gnomon_wnode.out.outputs
-
-        // prot_gnomon_prepare(models, task_params.get('prot_gnomon_prepare', [:]))
-        
-        annot_builder(gencoll_asn, models, genome_asn, task_params.get('annot_builder', [:]))
-        def accept_asn = annot_builder.out.accept_asn
-        
-        annotwriter(accept_asn, [:])
-        annotwriter.out.annoted_file
     emit:
         out_files = annotwriter.out.annoted_file
         annot_builder_output = annot_builder.out.outputs
+        // locus = post_gnomon_plane.out.locus
 }

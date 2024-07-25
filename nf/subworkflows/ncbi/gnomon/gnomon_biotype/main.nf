@@ -15,7 +15,7 @@ workflow gnomon_biotype {
         parameters  // Map : extra parameter and parameter update
     main:
         default_params = ""
-        effective_params = merge_params(default_params, parameters, 'gnomon_training')
+        effective_params = merge_params(default_params, parameters, 'gnomon_biotype')
         run_gnomon_biotype(models_files, splices_files, denylist, gencoll_asn, swiss_prot_asn,  lds2_source, raw_blastp_hits, default_params)
     emit:
         biotypes = run_gnomon_biotype.out.biotypes
@@ -50,7 +50,12 @@ process run_gnomon_biotype {
     echo "${models_files.join('\n')}" > models.mft
     echo "prot_hits.asn" > prot_hits.mft
     echo "${splices_files.join('\n')}" > splices.mft
-    gnomon_biotype  -gc $gencoll_asn -asn-cache ./asncache/  -nogenbank -gnomon_models models.mft -o output/biotypes.tsv -o_prots_rpt output/prots_rpt.tsv -prot_denylist $denylist -prot_hits prot_hits.mft -prot_splices splices.mft
+    if [ -z "$denylist" ]
+    then
+      gnomon_biotype  -gc $gencoll_asn -asn-cache ./asncache/  -nogenbank -gnomon_models models.mft -o output/biotypes.tsv -o_prots_rpt output/prots_rpt.tsv -prot_hits prot_hits.mft -prot_splices splices.mft  -reftrack-server 'NONE' -allow_lt631 true
+    else
+      gnomon_biotype  -gc $gencoll_asn -asn-cache ./asncache/  -nogenbank -gnomon_models models.mft -o output/biotypes.tsv -o_prots_rpt output/prots_rpt.tsv -prot_denylist $denylist -prot_hits prot_hits.mft -prot_splices splices.mft  -reftrack-server 'NONE' -allow_lt631 true
+    fi
     """
     stub:
     """
@@ -59,3 +64,4 @@ process run_gnomon_biotype {
     touch output/biotypes.tsv
     """
 }
+

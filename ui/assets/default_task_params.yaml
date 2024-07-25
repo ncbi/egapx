@@ -37,21 +37,22 @@ tasks:
     gpx_make_outputs: -default-output-name align -slices-for affinity -sort-by job-id
       -unzip align
     gpx_qsubmit: -affinity subject
-    rnaseq_collapse: -backlog 1 -max-jobs 1 -rank-counts-precalculated
+    rnaseq_collapse: -backlog 1 -max-jobs 1 -support-non-sra
+    # -rank-counts-precalculated
     rnaseq_collapse_create_jobs: -alignments-per-job 50000 -min-range 100000
   star_index:
     STAR: --runThreadN 8
   star_wnode:
     gpx_qdump: -unzip '*'
     gpx_qsubmit: -affinity subject
-    star_wnode: -cpus-per-worker 16 -csi-threshold 512000000 -max-intron 600000 -star-params
-      '--alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax
+    star_wnode: -cpus-per-worker 16 -csi-threshold 512000000 -preserve-star-logs
+    star-params: --alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax
       50 --runThreadN 16 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes
-      NH HI AS nM NM MD jM jI XS MC --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
-      50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None'
-      -preserve-star-logs
+      'NH HI AS nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
+      50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None 
   miniprot:
-    miniprot: -t 31 -p 0.4 --outs=0.4 -G 600000
+    split_proteins: -n 100000
+    miniprot: -t 31 -p 0.4 --outs=0.4
   paf2asn:
     paf2asn: -prosplign-refinement
   best_aligned_prot:
@@ -61,4 +62,10 @@ tasks:
   align_filter_sa:
     align_filter:  -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  
   gnomon_training:
-    gnomon_training: -maxintron 1200000 -asn -b
+    gnomon_training: -asn -b
+  diamond:
+    diamond: -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits -ofmt seq-align-set
+    diamond_blastp:  --sam-query-len --very-sensitive --unal 0 --comp-based-stats 0 --masking 0
+  diamond_orthology:
+    diamond_orhtology: -ofmt seq-align-set -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits
+    diamond_orthology_blastp: --sam-query-len --very-sensitive --unal 0 --comp-based-stats 0 --masking 0 

@@ -14,6 +14,9 @@ workflow prot_gnomon_prepare {
         prot_gnomon_prepare_p(models, prot_gnomon_prepare_params)
     emit:
         outputs = prot_gnomon_prepare_p.out.outputs
+        LDS2 = prot_gnomon_prepare_p.out.LDS2
+        prot_ids = prot_gnomon_prepare_p.out.prot_ids
+        nuc_ids = prot_gnomon_prepare_p.out.nuc_ids
 }
 
 
@@ -23,6 +26,9 @@ process prot_gnomon_prepare_p {
         val params
     output:
         path "*", emit: 'outputs'
+        path "LDS2", emit: 'LDS2'
+        path "prot_ids.seq_id", emit: 'prot_ids'
+        path "nuc_ids.seq_id", emit: 'nuc_ids'
     script:
     """
     echo ${models} |tr ' ' '\\n' > models.mft
