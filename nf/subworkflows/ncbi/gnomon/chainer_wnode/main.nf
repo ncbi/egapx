@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 
 
 include { merge_params } from '../../utilities'
-include { run_align_sort }  from '../align_sort_sa/main.nf'
+include { run_align_sort }  from '../../default/align_sort_sa/main.nf'
 
 split_count=16
 
@@ -145,8 +145,8 @@ process run_gpx_make_outputs {
     output:
         path "output/chains.*.out.gz", emit: 'chains'
         path "output/chains.*.out.gz.slices", emit: 'chains_slices'
-        path "output/evidence.*.out.gz", emit: 'evidence'
-        path "output/evidence.*.out.gz.slices", emit: 'evidence_slices'
+        path "output/evidence.*.out.gz", emit: 'evidence', optional: true
+        path "output/evidence.*.out.gz.slices", emit: 'evidence_slices', optional: true
     script:
     """
     ls -1 gpx_inputs/* > gpx_inputs.mft

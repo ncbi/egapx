@@ -11,7 +11,7 @@ include { gnomon_wnode } from './gnomon/gnomon_wnode/main'
 include { prot_gnomon_prepare } from './gnomon/prot_gnomon_prepare/main'
 include { annot_builder } from './default/annot_builder/main'
 include { annotwriter } from './default/annotwriter/main'
-include { run_align_sort} from './gnomon/align_sort_sa/main'
+include { run_align_sort} from './default/align_sort_sa/main'
 
 params.intermediate = false
 
@@ -29,6 +29,7 @@ workflow only_gnomon {
         // hmm_params - HMM parameters
         tax_id          // NCBI tax id of the closest taxon to the genome
         hmm_params      // HMM parameters
+        hmm_taxid       // NCBI tax id of the taxon of the HMM
         //
         softmask        // softmask for GNOMON, optional
         task_params     // task parameters for every task

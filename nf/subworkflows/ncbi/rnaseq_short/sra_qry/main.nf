@@ -37,6 +37,7 @@ process run_sra_query {
     #!/usr/bin/env python3
     # sra_query.py - proxy compliant replacement for sra_query
 
+    import csv
     import json
     from urllib.request import urlopen
     from urllib.parse import quote
@@ -76,7 +77,8 @@ process run_sra_query {
             line = line.strip()
             if not line:
                 continue
-            parts = line.split(",")
+            for l in  csv.reader([line], quotechar='"', delimiter=',', quoting=csv.QUOTE_ALL, skipinitialspace=True):
+                parts = l
             printable = []
             paired = False
             for k in ["Run", "Sample", "LibraryLayout", "spots", "bases", "NA", "NA", "Platform", "Model", "Experiment", "SRAStudy", "BioSample", "ProjectID", "BioProject", "ScientificName", "TaxID", "ReleaseDate"]:

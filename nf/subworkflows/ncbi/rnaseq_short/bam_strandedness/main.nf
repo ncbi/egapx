@@ -21,9 +21,8 @@ workflow bam_strandedness {
 }
 
 
-
-
 process rnaseq_divide_by_strandedness {
+    label 'large_disk'
     input:
         path bam_list
         path metadata_file
@@ -47,5 +46,4 @@ process rnaseq_divide_by_strandedness {
     touch output/stranded.list
     touch output/unstranded.list
     """
- }
-
+}

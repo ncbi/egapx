@@ -5,6 +5,7 @@ include { merge_params } from '../../utilities'
 
 
 process build_index {
+    label 'big_job'
     input:
         path genome_file
         val parameters
@@ -14,7 +15,8 @@ process build_index {
         out_dir = genome_file.toString().replaceFirst(/\.(fa(sta)?|fna)$/, ".index")
     """
     echo "in $genome_file, out $out_dir"
-    STAR  $parameters --runMode genomeGenerate --genomeDir $out_dir --genomeFastaFiles $genome_file 
+    STAR  $parameters --runMode genomeGenerate --genomeDir $out_dir --genomeFastaFiles $genome_file
+    chmod a+rx $out_dir
     """
 
     stub:

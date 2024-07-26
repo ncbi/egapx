@@ -26,9 +26,9 @@ workflow best_aligned_prot {
 
 process run_best_aligned_prot {
     input:
-        path (genome, stageAs: 'LDS_Index/genome.asnt')
-        path (proteins,  stageAs: 'LDS_Index/proteins.asnt')
-        path alignment_asn_file
+        path genome, stageAs: 'LDS_Index/genome.asnt'
+        path proteins,  stageAs: 'LDS_Index/proteins.asnt'
+        path alignment_asn_file // list of alignment files
         path gencoll_file
         val parameters
     output:
@@ -39,10 +39,11 @@ process run_best_aligned_prot {
     """
     mkdir -p output
     lds2_indexer -source LDS_Index
-    echo "$alignment_asn_file" > align.mft
+    echo "${alignment_asn_file.join('\n')}" > align.mft
     best_placement ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank  -gc_path $gencoll_file -in_alns align.mft -out_alns output/align.asn -out_rpt  output/report.txt
     """
     stub:
+        print("Best aligned prot input ${alignment_asn_file}")
     """
     mkdir -p output
     touch output/align.asn

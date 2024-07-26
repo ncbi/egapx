@@ -14,7 +14,7 @@ workflow rnaseq_collapse {
         parameters        // Map: extra parameter and parameter update
     main:
         String create_jobs_params =  merge_params("-alignments-per-job 50000 -min-range 100000", parameters, 'rnaseq_collapse_create_jobs')
-        String rnaseq_collapse_params = merge_params("-backlog 1 -max-jobs 1 -rank-counts-precalculated", parameters, 'rnaseq_collapse')
+        String rnaseq_collapse_params = merge_params("-backlog 1 -max-jobs 1 -support-non-sra", parameters, 'rnaseq_collapse')
         String gpx_make_outputs_params =  merge_params("-default-output-name align -slices-for affinity -sort-by job-id -unzip align", parameters, 'gpx_make_outputs')
 
         def (jobs, lines_per_file) = generate_jobs(genome, scaffold_list, max_jobs, create_jobs_params)

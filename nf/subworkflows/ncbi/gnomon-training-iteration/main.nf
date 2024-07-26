@@ -1,6 +1,6 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
-nextflow.preview.recursion=true
+//nextflow.preview.recursion=true
 
 
 include { gnomon_training_iteration; gnomon_training_iteration as gnomon_training_iteration2; 
@@ -20,22 +20,21 @@ workflow gnomon_training_iterations {
         gnomon_softmask_lds2
         gnomon_softmask_lds2_source
         gnomon_scaffolds
-        chainer_parameters
-        gnomon_parameters
-        gnomon_training_parameters
+        max_intron
+        parameters
     main:
     gnomon_training_iteration(models_file, genome_asn, proteins_asn ,chainer_alignments,chainer_evidence_denylist,chainer_gap_fill_allowlist,
-               chainer_trusted_genes,  chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, chainer_parameters, gnomon_parameters, gnomon_training_parameters)
+               chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
+               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
     gnomon_training_iteration2(gnomon_training_iteration.out.hmm_params_file, genome_asn, proteins_asn ,chainer_alignments,
-               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes,  chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, chainer_parameters, gnomon_parameters, gnomon_training_parameters)
+               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
+               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
     gnomon_training_iteration3(gnomon_training_iteration2.out.hmm_params_file, genome_asn, proteins_asn ,chainer_alignments,
-               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes,  chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, chainer_parameters, gnomon_parameters, gnomon_training_parameters)
+               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
+               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
     gnomon_training_iteration4(gnomon_training_iteration3.out.hmm_params_file, genome_asn, proteins_asn ,chainer_alignments,
-               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes,  chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, chainer_parameters, gnomon_parameters, gnomon_training_parameters)
+               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
+               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
 
     emit:
         hmm_params_file = gnomon_training_iteration4.out.hmm_params_file
@@ -84,14 +83,13 @@ workflow gnomon_training_iterations {
         gnomon_softmask_lds2
         gnomon_softmask_lds2_source
         gnomon_scaffolds
-        chainer_parameters
-        gnomon_parameters
-        gnomon_training_parameters
+        max_intron
+        parameters
     main:
         gnomon_training_iteration
             .recurse(models_file, genome_asn, proteins_asn ,chainer_alignments,chainer_evidence_denylist,chainer_gap_fill_allowlist, 
                chainer_trusted_genes,  chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, chainer_parameters, gnomon_parameters, gnomon_training_parameters)
+               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
             .times(4)
     emit:
         hmm_params_file = gnomon_training_iteration.out.hmm_params_file

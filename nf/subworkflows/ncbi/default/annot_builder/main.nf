@@ -30,11 +30,13 @@ workflow annot_builder {
         def m = annot_builder_main('outdir', params).collect() 
         def i = annot_builder_input('outdir', m, '01', gnomon_file, params)
         // FIXME: intended params 4-5 to be lists of all input files and all input manifests, but it complained with only one entry
-        def (all, accept) = annot_builder_run('outdir', i[0], gencoll_asn, i[1], gnomon_file, genome_asn, params)
+        def (all, accept, accept_ftable, annot) = annot_builder_run('outdir', i[0], gencoll_asn, i[1], gnomon_file, genome_asn, params)
 
     emit:
         outputs = all
         accept_asn = accept
+        accept_ftable_annot = accept_ftable
+        annot_files = annot
 }
 
 
@@ -76,6 +78,7 @@ process annot_builder_main {
     stub:
     """
         touch annot_builder_main.ini
+        echo 'main' > annot_builder_main.ini
     """
 }
 
@@ -137,6 +140,8 @@ process annot_builder_input {
     """
         touch annot_builder_input.ini
         touch input_manifest_${provider_number}.mft
+        cp ${prior_file} annot_builder_input.ini
+        echo 'input ${provider_number}' >> annot_builder_input.ini 
     """
 }
 
@@ -152,8 +157,10 @@ process annot_builder_run {
         path genome_asn, stageAs: 'genome/*'
         val params
     output:
-        path "${outdir}/*"
-        path "${outdir}/ACCEPT/accept.asn", optional: true
+        path "${outdir}/*", emit: "all"
+        path "${outdir}/ACCEPT/accept.asn", emit: "accept", optional: true
+        path "${outdir}/ACCEPT/accept.ftable_annot", emit: "accept_ftable_annot", optional: true
+        path "${outdir}/ACCEPT/*.annot", optional: true
     script:
     """
     mkdir -p $outdir/ACCEPT
@@ -165,6 +172,7 @@ process annot_builder_run {
     lds2_indexer -source genome/ -db LDS2
     # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
     annot_builder -accept-output both -nogenbank -lds2 LDS2 -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
+    cat ${outdir}/ACCEPT/*.ftable.annot > ${outdir}/ACCEPT/accept.ftable_annot
     """
     stub:
     """
@@ -174,7 +182,15 @@ process annot_builder_run {
     mkdir -p $outdir/REPORT
     mkdir -p $outdir/TEST
     
-    touch ${outdir}/annot_builder.log
-    touch ${outdir}/accept.asn
+    echo "1" > ${outdir}/annot_builder.log
+    echo "2" > ${outdir}/accept.asn
+    echo "3" > ${outdir}/accept.ftable.annot
+    
+
+    echo "4" > ${outdir}/ACCEPT/accept.asn
+    echo "5" > ${outdir}/ACCEPT/accept.ftable_annot
+    echo "S1" > ${outdir}/ACCEPT/S1.annot
+    echo "S2" > ${outdir}/ACCEPT/S2.annot
+
     """
 }

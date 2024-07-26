@@ -26,6 +26,7 @@ workflow bam_bin_and_sort {
 
 
 process calc_assembly_sizes {
+    label 'large_disk'
     input:
         path bam_files
     output:
@@ -127,6 +128,7 @@ process bam_bin {
 
 
 process merge_prepare {
+    label 'large_disk'
     input:
         path runs
     output:
@@ -168,6 +170,7 @@ process merge_prepare {
 
 process merge {
     label 'big_job'
+    label 'large_disk'
     input:
         path merge_args
         path bins
@@ -181,4 +184,5 @@ process merge {
     stub:
     """
         touch 1.bam
-    """}
+    """
+}
