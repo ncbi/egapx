@@ -66,23 +66,13 @@ Input to EGAPx is in the form of a YAML file.
     reads: [SRA Study ID]
     reads: SRA query for reads
     ```
-  - If you are using your local reads, then the FASTA/FASTQ headers need to be in the following format:
+  - If you are using your local reads, then the FASTA/FASTQ files should be provided in the following format:
     ```
-    head SRR8506572_1.fasta| grep ">"
-    >SRR8506572.1.1
-    >SRR8506572.2.1
-  
-    head SRR8506572_2.fasta| grep ">"
-    >SRR8506572.1.2
-    >SRR8506572.2.2
-  
-    head SRR8506572_2.fastq| grep "@"
-    @SRR8506572.1.2
-    @SRR8506572.2.2
-  
-    head SRR8506572_1.fastq| grep "@"
-    @SRR8506572.1.1
-    @SRR8506572.2.1
+    reads:
+     - path_to_Sample1_R1.gz
+     - path_to_Sample1_R2.gz
+     - path_to_Sample2_R1.gz
+     - path_to_Sample2_R2.gz
     ```
 
   - If you provide an SRA Study ID, all the SRA run ID's belonging to that Study ID will be included in the EGAPx run.    
@@ -103,7 +93,7 @@ Input to EGAPx is in the form of a YAML file.
 
 ## Input example
  
-- A test example YAML file `./examples/input_D_farinae_small.yaml` is included in the `egapx` folder. Here, the RNA-seq data is provided as paths to the reads FASTA files. These FASTA files are a sampling of the reads from the complete SRA read files to expedite testing. Currently for paired-end data specified by `reads:`, filenames **must** end in .1 and .2
+- A test example YAML file `./examples/input_D_farinae_small.yaml` is included in the `egapx` folder. Here, the RNA-seq data is provided as paths to the reads FASTA files. These FASTA files are a sampling of the reads from the complete SRA read files to expedite testing. 
 
 
   ```
