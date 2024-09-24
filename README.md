@@ -11,7 +11,7 @@ We currently have protein datasets posted that are suitable for most vertebrates
 
 We will be adding datasets for plants and other invertebrates in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
 
-We currently have protein datasets posted for most vertebrates (mammals, sauropsids, ray-finned fishes) and arthropods. We will be adding datasets for more arthropods, vertebrates and plants in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
+
 
 **Warning:**
 The current version is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use. Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues)  if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.  
