@@ -2,12 +2,14 @@ tasks:
   setup:
     convert_genome: force-local-ids
     convert_proteins: force-local-ids
+  align_sort_sa:
+    align_sort: -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   bam_bin_and_sort:
     bam_bin: -avg-size-per-bin 200000000 -file-pattern 'bin#.bam' -exclude-organelle
   bam_strandedness:
     rnaseq_divide_by_strandedness: -min-aligned 1000000 -min-unambiguous 200 -min-unambiguous-pct
       2 -percentage-threshold 98
-  chainer:
+  chainer_wnode:
     chainer_wnode: -altfrac 80.0 -capgap 5 -cdsbonus 0.05 -composite 10000 -end-pair-support-cutoff
       0.1 -endprotfrac 0.05 -filters 'remove_single_exon_est_models remove_single_exon_noncoding_models'
       -high-identity 0.98 -hmaxlen 0.25 -hthresh 0.02 -i3p 14.0 -i5p 7.0 -lenpen 0.005
@@ -25,7 +27,7 @@ tasks:
       -no-scores
   getfasta:
     getfasta: -u full-assembly -bare-accession -use-reference-non-nuclear
-  gnomon:
+  gnomon_wnode:
     annot_wnode: -margin 1000 -mincont 1000 -minlen 225 -mpp 10.0 -ncsp 25 -window
       200000 -nonconsens -open
     generic_action_node: -app annot_wnode
@@ -33,9 +35,10 @@ tasks:
     gpx_qsubmit: ''
   prot_gnomon_prepare:
     prot_gnomon_prepare: ''
+  sra_qry:
+    sra_query: ''
   rnaseq_collapse:
-    gpx_make_outputs: -default-output-name align -slices-for affinity -sort-by job-id
-      -unzip align
+    gpx_make_outputs: -default-output-name align -slices-for affinity -sort-by job-id -unzip align
     gpx_qsubmit: -affinity subject
     rnaseq_collapse: -backlog 1 -max-jobs 1 -support-non-sra
     # -rank-counts-precalculated
@@ -43,29 +46,49 @@ tasks:
   star_index:
     STAR: --runThreadN 8
   star_wnode:
-    gpx_qdump: -unzip '*'
-    gpx_qsubmit: -affinity subject
-    star_wnode: -cpus-per-worker 16 -csi-threshold 512000000 -preserve-star-logs
+    star_wnode: -preserve-star-logs
     star-params: --alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax
-      50 --runThreadN 16 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes
+      50 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes
       'NH HI AS nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
       50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None 
   miniprot:
-    split_proteins: -n 100000
+    split_proteins: -n 25000
     miniprot: -t 31 -p 0.4 --outs=0.4
   paf2asn:
     paf2asn: -prosplign-refinement
   best_aligned_prot:
-    best_aligned_prot: -asm_alns_filter 'reciprocity = 3'
+    best_placement: -asm_alns_filter 'reciprocity = 3'
   chainer_sort_alignments:
     align_sort:  -ifmt seq-align  -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   align_filter_sa:
     align_filter:  -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  
   gnomon_training:
     gnomon_training: -asn -b
-  diamond:
+  diamond_identify:
     diamond: -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits -ofmt seq-align-set
-    diamond_blastp:  --sam-query-len --very-sensitive --unal 0 --comp-based-stats 0 --masking 0
+    diamond_blastp: --sam-query-len --comp-based-stats 0 --evalue 0.0001 --very-sensitive --masking 0 --unal 0
   diamond_orthology:
-    diamond_orhtology: -ofmt seq-align-set -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits
-    diamond_orthology_blastp: --sam-query-len --very-sensitive --unal 0 --comp-based-stats 0 --masking 0 
+    diamond: -ofmt seq-align-set -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits
+    diamond_blastp: --sam-query-len --very-sensitive --unal 0 --max-target-seqs 100 --comp-based-stats 0 --masking 0
+  gnomon_biotype:
+    gnomon_biotype: ''
+  find_orthologs:
+    find_orthologs: ''
+  locus_link:
+    locus_type: ''
+  locus_track:
+    locus_track: ''
+  final_asn_markup:
+    final_asn: '-annot-provider "GenBank submitter" -annot-pipeline "NCBI EGAPx"'
+  extract_products_from_models:
+    extract_products: ''
+  best_protein_hits:
+    align_filter: " -filter 'pct_coverage >= 50' "
+    align_sort: ' -k query,-bit_score,slen,-align_length -group 1 -top 1 '
+  annot_builder:
+    annot_builder: ''
+  annotwriter:
+    annotwriter: ''
+  convert_annotations:
+    annotwriter_gff: ''
+    annotwriter_gtf: ''

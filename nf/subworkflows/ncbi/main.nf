@@ -6,12 +6,14 @@ nextflow.enable.dsl=2
 
 include { rnaseq_short_plane } from './rnaseq_short/main'
 include { target_proteins_plane } from './target_proteins/main'
-include { gnomon_plane; post_gnomon_plane } from './gnomon/main'
+include { gnomon_plane } from './gnomon/main'
 include { orthology_plane } from './orthology/main'
+include { annot_proc_plane } from './annot_proc/main'
 include { setup_genome; setup_proteins } from './setup/main'
-include { annot_builder } from './default/annot_builder/main'
-include { annotwriter } from './default/annotwriter/main'
-
+//include { annot_builder } from './annot_proc/annot_builder/main'
+//include { final_asn_markup } from './annot_proc/final_asn/main'
+//include { annotwriter } from './annot_proc/annotwriter/main'
+include {convert_annotations } from './default/convert_annotations/main' 
 
 params.intermediate = false
 params.use_orthology = false
@@ -20,8 +22,9 @@ params.use_post_gnomon = false
 
 workflow egapx {
     take:
-        genome          // path to genome
-        proteins        // path to proteins, optional
+        genome           // path to genome
+        proteins         // path to proteins, optional
+        proteins_trusted // path to trusted proteins, optional
 
         // Alternative groups of parameters, one of them should be set
         // reads_query - SRA query in the form accepted by NCBI
@@ -38,13 +41,16 @@ workflow egapx {
         // tax_id - NCBI tax id of the closest taxon to the genome
         // hmm_params - HMM parameters
         tax_id          // NCBI tax id of the closest taxon to the genome
+        symbol_format_class // string for how to create gene names
         hmm_params      // HMM parameters
-        hmm_taxid       // NCBI tax id of the HMM
+        train_hmm       // Boolean, whether to train HMM
         //
         softmask        // softmask for GNOMON, optional
         //
         max_intron      // max intron length
         genome_size_threshold // the threshold for calculating actual max intron length
+        ortho_files     // files reference genome sequence and annotation for find_orthology
+        reference_sets  // reference sets, for now only swissprot
         task_params     // task parameters for every task
     main:
         print "workflow.container: ${workflow.container}"
@@ -87,30 +93,44 @@ workflow egapx {
 
         def gnomon_models = []
         def effective_hmm
-        gnomon_plane(genome_asn, scaffolds, gencoll_asn, proteins_asn, alignments, tax_id, hmm_params, hmm_taxid, softmask, eff_max_intron, task_params) 
+        gnomon_plane(genome_asn, scaffolds, gencoll_asn, proteins_asn, alignments, proteins_trusted, tax_id, hmm_params, train_hmm, softmask, eff_max_intron, task_params) 
         gnomon_models = gnomon_plane.out.gnomon_models
 
 
         // outputs 
-        annot_builder(gencoll_asn, gnomon_models, genome_asn, task_params.get('annot_builder', [:]))
-        def accept_annot_file = annot_builder.out.accept_ftable_annot 
-        def annot_files = annot_builder.out.annot_files
+       
+        def accept_annot_file = []
+        def gff_annotated_file = []
+        def final_asn_out = []  
+        def locus_out = []
+        def stats_dir = []
+        def annotated_genome_file = []
+        def annotation_data_comment_file = []
+        annot_proc_plane(gnomon_models, gencoll_asn, genome_asn, genome_asnb, scaffolds, tax_id, symbol_format_class, ortho_files, reference_sets, task_params)
+        locus_out = annot_proc_plane.out.locus
+        final_asn_out = annot_proc_plane.out.final_asn_out
+        accept_annot_file = annot_proc_plane.out.accept_annot_file
+        gff_annotated_file = annot_proc_plane.out.gff_annotated_file
+        stats_dir = annot_proc_plane.out.stats
+        annotated_genome_file = annot_proc_plane.out.annotated_genome_asn
+        annotation_data_comment_file = annot_proc_plane.out.annotation_data_comment
 
-        if (params.use_orthology) {
-            // ORTHOLOGY
-            orthology_plane(genome_asnb, gencoll_asn, gnomon_models, annot_files, task_params)
-            def orthologs = orthology_plane.out.orthologs
-            if (params.use_post_gnomon) {
-                //POST GNOMON
-                post_gnomon_plane(gnomon_models, gencoll_asn, orthologs, tax_id, task_params)
-            }
-        }
-
-        annotwriter(accept_annot_file, [:])
-        annotwriter.out.annoted_file     
-
+        convert_annotations(annot_proc_plane.out.to_convert, task_params.get('convert_annotations', [:])) 
+        
     emit:
-        out_files = annotwriter.out.annoted_file
-        annot_builder_output = annot_builder.out.outputs
-        // locus = post_gnomon_plane.out.locus
+        out_files = gff_annotated_file
+        out_ggff = convert_annotations.out.genomic_gff
+        out_ggtf = convert_annotations.out.genomic_gtf
+        out_gfa  = convert_annotations.out.genomic_fasta
+        out_rna_fa = convert_annotations.out.transcripts_fasta
+        out_cds_fa = convert_annotations.out.cds_fasta
+        out_prot_fa = convert_annotations.out.proteins_fasta
+        annot_builder_output = annot_proc_plane.out.accept_annot_file
+        locus = locus_out
+        final_asn_outputs = final_asn_out
+        validated = annot_proc_plane.out.validated
+        stats = stats_dir
+        annotated_genome_asn = annotated_genome_file
+        annotation_data_comment = annotation_data_comment_file
+        //converted_outs = converted_outs
 }

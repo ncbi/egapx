@@ -2,14 +2,18 @@
 
 EGAPx is the publicly accessible version of the updated NCBI [Eukaryotic Genome Annotation Pipeline](https://www.ncbi.nlm.nih.gov/refseq/annotation_euk/process/). 
 
-EGAPx takes an assembly fasta file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. The final annotation for the input assembly is produced as a `gff` file. 
+EGAPx takes an assembly fasta file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. Functional annotation is added to the final structural annotation set based on the type and quality of the model and orthology information. The final annotation for the input assembly is produced as a `gff` file. 
 
-We currently have protein datasets posted that are suitable for most vertebrates and arthropods:
-  - Chordata - Mammalia, Sauropsida, Actinopterygii (ray-finned fishes)
+We currently have protein datasets posted that are suitable for most vertebrates, arthropods, and some plants:
+  - Chordata - Mammalia, Sauropsida, Actinopterygii (ray-finned fishes), other Vertebrates
   - Insecta - Hymenoptera, Diptera, Lepidoptera, Coleoptera, Hemiptera 
   - Arthropoda - Arachnida, other Arthropoda
 
-We will be adding datasets for plants and other invertebrates in the next couple of months. Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
+  - Monocots - Lilipopsida
+  - Eudicots - Asterids, Rosids, Fabids, Caryophyllales
+  
+
+Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
 
 
 
@@ -66,16 +70,6 @@ Input to EGAPx is in the form of a YAML file.
     reads: [SRA Study ID]
     reads: SRA query for reads
     ```
-  - If you are using your local reads, then the FASTA/FASTQ files should be provided in the following format:
-    ```
-    reads:
-     - path_to_Sample1_R1.gz
-     - path_to_Sample1_R2.gz
-     - path_to_Sample2_R1.gz
-     - path_to_Sample2_R2.gz
-    ```
-
-  - If you provide an SRA Study ID, all the SRA run ID's belonging to that Study ID will be included in the EGAPx run.    
 
 - The following are the _optional_ key-value pairs for the input file:  
 
@@ -89,7 +83,19 @@ Input to EGAPx is in the form of a YAML file.
     hmm: path to HMM file
     ```
 
-
+- The following are _optional_ metadata configuration parameters (not critical for testing EGAPx alpha, will later be used for GenBank submissions):
+  - Annotation provider. The main contact for this genome assembly.
+    ```
+    annotation_provider: GenBank submitter 
+    ```
+  - Annotation name prefix. GenBank assembly accession version. Uniquely identifies annotation products originating from the same annotation run. The resulting annotation name is `<annotation_name_prefix>-GB_YYYY_MM_DD`. If the GCA acc.ver if not known, do not include this parameter. The annotation name will default to `GB_YYYY_MM_DD`.
+    ```
+    annotation_name_prefix: GCA_#########.1 
+    ```
+  - Locus tag prefix. One to 9-letter prefix to use for naming genes on this genome assembly. If an official locus tag prefix was already reserved from an INSDC organization (GenBank, ENA or DDBJ) for the given BioSample and BioProject pair, provide here. Otherwise, provide a string of your choice. If no value is provided, the prefix 'egapxtmp' will be used.
+    ```
+    locus_tag_prefix: egapxtmp 
+    ```
 
 ## Input example
  
@@ -106,28 +112,57 @@ Input to EGAPx is in the form of a YAML file.
     - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/data/Dermatophagoides_farinae_small/SRR9005248.2
   ```
 
+
+- If you are using your local reads, then the FASTA/FASTQ files can be provided using the format below. For proper specification of paired-end read files, the filenames must have a shared prefix prior to an underscore character, and the prefix is not shared by any other library:
+   ```
+   reads:
+     - path/to/se1_reads.fq      # path to single-end reads
+     - path/to/se2_reads.fq
+     - path/to/pe1_reads_R1.fq   # path to paired-end R1 reads
+     - path/to/pe1_reads_R2.fq   # path to paired-end R2 reads
+     - path/to/pe2_reads_R1.fq
+     - path/to/pe2_reads_R2.fq
+    ```
+    
+    Alternatively, you can explicitly set the names and paths to reads sets by following the format below. Here the filenames for the reads can be anything, but the set names for each set has to be unique. 
+    ```
+    reads:
+     - - single_end_library_name1   # set name
+       - - path/to/se1_reads.fq     # file name for single-end reads
+     - - single_end_library_name2
+       - - path/to/se2_reads.fq
+     - - paired_end_library_name1   # set name  
+       - - path/to/pe1_reads_R1.fq  # file name for paired-end R1 reads
+         - path/to/pe1_reads_R2.fq  # file name for paied-end R2 reads
+     - - paired_end_library_name2
+       - - path/to/pe2_reads_R1.fq
+         - path/to/pe2_reads_R2.fq
+    ```
+    
+    There is one other option on how to provide RNA-seq data. If you have a large number of local RNA-seq data, you can list them in a file with a set name and a filepath in each line (see `examples/input_D_farinae_small_reads.txt`). Then you can read that file from the input yaml (see `examples/input_D_farinae_small_readlist.yaml`). 
+     
 - To specify an array of NCBI SRA datasets:
    ```
    reads:
      - SRR8506572
      - SRR9005248
    ```
+   - If you provide an SRA Study ID, all the SRA run ID's belonging to that Study ID will be included in the EGAPx run.    
 
 - To specify an SRA entrez query:
     ```
     reads: 'txid6954[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession] AND (SRR8506572[Accession] OR SRR9005248[Accession] )'
     ```
 
-  **Note:** Both the above examples will have more RNA-seq data than the `input_D_farinae_small.yaml` example. To make sure the entrez query does not produce a large number of SRA runs, please run it first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and list it in the input yaml.   
+  **Note:** Both the above examples using SRA reads or SRA entrez query will have more RNA-seq data than the `input_D_farinae_small.yaml` example. To make sure the entrez query does not produce a large number of SRA runs, please run it first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and list it in the input yaml.   
 
-- First, test EGAPx on the example provided (`input_D_farinae_small.yaml`, a dust mite) to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_tellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.  
+- First, test EGAPx on the example provided (`input_D_farinae_small.yaml`, a dust mite) to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_stellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.  
 
 ## Run EGAPx
 
 - The `egapx` folder contains the following directories:
     - examples
     - nf
-    - test
     - third_party_licenses
     - ui 
      
@@ -137,7 +172,7 @@ Input to EGAPx is in the form of a YAML file.
   ```
   python -m venv /path/to/new/virtual/environment
   source /path/to/new/virtual/environment/bin/activate
-  pip install -r ui/requirements.txt
+  pip install -r requirements.txt
   ```  
 
 
@@ -165,56 +200,58 @@ Input to EGAPx is in the form of a YAML file.
     - use `-e docker` for using Docker image
     - use `-e singularity` for using the Singularity image
     - use `-e biowulf_cluster` for Biowulf cluster using Singularity image
-    - use '-e slurm` for using SLURM in your HPC.
+    - use `-e slurm` for using SLURM in your HPC.
         - Note that for this option, you have to edit `./egapx_config/slurm.config` according to your cluster specifications.
     - type `python3 ui/egapx.py  -h ` for the help menu 
 
       ```
-      $ ui/egapx.py  -h
-      
-      
-      !!WARNING!!
-      This is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use.
-
-      usage: egapx.py [-h] [-o OUTPUT] [-e EXECUTOR] [-c CONFIG_DIR] [-w WORKDIR] [-r REPORT] [-n] [-st]
-                [-so] [-dl] [-lc LOCAL_CACHE] [-q] [-v] [-fn FUNC_NAME]
-                [filename]
+      $ ui/egapx.py  -help
+      usage: egapx.py [-h] [-o OUTPUT] [-e EXECUTOR] [-c CONFIG_DIR] [-w WORKDIR]
+                      [-r REPORT] [-n] [-st] [-so] [-ot ORTHO_TAXID] [-dl]
+                      [-lc LOCAL_CACHE] [-q] [-v] [-V] [-fn FUNC_NAME]
+                      [filename]
 
       Main script for EGAPx
 
       optional arguments:
         -h, --help            show this help message and exit
         -e EXECUTOR, --executor EXECUTOR
-                        Nextflow executor, one of docker, singularity, aws, or local (for NCBI
-                        internal use only). Uses corresponding Nextflow config file
+                              Nextflow executor, one of docker, singularity, aws,
+                              or local (for NCBI internal use only). Uses
+                              corresponding Nextflow config file
         -c CONFIG_DIR, --config-dir CONFIG_DIR
-                        Directory for executor config files, default is ./egapx_config. Can be also
-                        set as env EGAPX_CONFIG_DIR
+                              Directory for executor config files, default is
+                              ./egapx_config. Can be also set as env
+                              EGAPX_CONFIG_DIR
         -w WORKDIR, --workdir WORKDIR
-                        Working directory for cloud executor
+                              Working directory for cloud executor
         -r REPORT, --report REPORT
-                        Report file prefix for report (.report.html) and timeline (.timeline.html)
-                        files, default is in output directory
+                              Report file prefix for report (.report.html) and
+                              timeline (.timeline.html) files, default is in output
+                              directory
         -n, --dry-run
         -st, --stub-run
-        -so, --summary-only   Print result statistics only if available, do not compute result
+        -so, --summary-only   Print result statistics only if available, do not
+                              compute result
+        -ot ORTHO_TAXID, --ortho-taxid ORTHO_TAXID
+                              Taxid of reference data for orthology tasks
         -lc LOCAL_CACHE, --local-cache LOCAL_CACHE
-                        Where to store the downloaded files
+                              Where to store the downloaded files
         -q, --quiet
         -v, --verbose
+        -V, --version         Report software version
         -fn FUNC_NAME, --func_name FUNC_NAME
-                        func_name
+                              func_name
 
       run:
-        filename              YAML file with input: section with at least genome: and reads: parameters
+        filename              YAML file with input: section with at least genome:
+                              and reads: parameters
         -o OUTPUT, --output OUTPUT
                         Output path
 
       download:
-        -dl, --download-only  Download external files to local storage, so that future runs can be
-                        isolated
-
-      
+        -dl, --download-only  Download external files to local storage, so that
+                              future runs can be isolated
       ```
 
 
@@ -229,82 +266,148 @@ This is an alpha release with limited features and organism scope to collect ini
 N E X T F L O W  ~  version 23.10.1
 Launching `/../home/user/egapx/ui/../nf/ui.nf` [golden_mercator] DSL2 - revision: c134f40af5
 in egapx block
-executor >  awsbatch (67)
-[f5/3007b8] process > egapx:setup_genome:get_genome_info            [100%] 1 of 1 ✔
-[32/a1bfa5] process > egapx:setup_proteins:convert_proteins         [100%] 1 of 1 ✔
-[96/621c4b] process > egapx:miniprot:run_miniprot                   [100%] 1 of 1 ✔
-[6d/766c2f] process > egapx:paf2asn:run_paf2asn                     [100%] 1 of 1 ✔
-[56/f1dd6b] process > egapx:best_aligned_prot:run_best_aligned_prot [100%] 1 of 1 ✔
-[c1/ccc4a3] process > egapx:align_filter_sa:run_align_filter_sa     [100%] 1 of 1 ✔
-[e0/5548d0] process > egapx:run_align_sort                          [100%] 1 of 1 ✔
-[a8/456a0e] process > egapx:star_index:build_index                  [100%] 1 of 1 ✔
-[d5/6469a6] process > egapx:star_simplified:exec (1)                [100%] 2 of 2 ✔
-[64/99ab35] process > egapx:bam_strandedness:exec (2)               [100%] 2 of 2 ✔
-[98/a12969] process > egapx:bam_strandedness:merge                  [100%] 1 of 1 ✔
-[78/0d7007] process > egapx:bam_bin_and_sort:calc_assembly_sizes    [100%] 1 of 1 ✔
-[74/bb014e] process > egapx:bam_bin_and_sort:bam_bin (2)            [100%] 2 of 2 ✔
-[39/3cdd00] process > egapx:bam_bin_and_sort:merge_prepare          [100%] 1 of 1 ✔
-[01/f64e38] process > egapx:bam_bin_and_sort:merge (1)              [100%] 1 of 1 ✔
-[aa/47a002] process > egapx:bam2asn:convert (1)                     [100%] 1 of 1 ✔
-[45/6661b3] process > egapx:rnaseq_collapse:generate_jobs           [100%] 1 of 1 ✔
-[64/68bc37] process > egapx:rnaseq_collapse:run_rnaseq_collapse (3) [100%] 9 of 9 ✔
-[18/bff1ac] process > egapx:rnaseq_collapse:run_gpx_make_outputs    [100%] 1 of 1 ✔
-[a4/76a4a5] process > egapx:get_hmm_params:run_get_hmm              [100%] 1 of 1 ✔
-[3c/b71c42] process > egapx:chainer:run_align_sort (1)              [100%] 1 of 1 ✔
-[e1/340b6d] process > egapx:chainer:generate_jobs                   [100%] 1 of 1 ✔
-[c0/477d02] process > egapx:chainer:run_chainer (16)                [100%] 16 of 16 ✔
-[9f/27c1c8] process > egapx:chainer:run_gpx_make_outputs            [100%] 1 of 1 ✔
-[5c/8f65d0] process > egapx:gnomon_wnode:gpx_qsubmit                [100%] 1 of 1 ✔
-[34/6ab0c9] process > egapx:gnomon_wnode:annot (1)                  [100%] 10 of 10 ✔
-[a9/e38221] process > egapx:gnomon_wnode:gpx_qdump                  [100%] 1 of 1 ✔
-[bc/8ebca4] process > egapx:annot_builder:annot_builder_main        [100%] 1 of 1 ✔
-[5f/6b72c0] process > egapx:annot_builder:annot_builder_input       [100%] 1 of 1 ✔
-[eb/1ccdd0] process > egapx:annot_builder:annot_builder_run         [100%] 1 of 1 ✔
-[4d/6c33db] process > egapx:annotwriter:run_annotwriter             [100%] 1 of 1 ✔
-[b6/d73d18] process > export                                        [100%] 1 of 1 ✔
-Waiting for file transfers to complete (1 files)
-Completed at: 27-Mar-2024 11:43:15
-Duration    : 27m 36s
-CPU hours   : 4.2
-Succeeded   : 67
+executor >  awsbatch (83)
+[41/69fb92] process > egapx:setup_genome:get_genome_info                                                                  [100%] 1 of 1 ✔
+[12/af924a] process > egapx:setup_proteins:convert_proteins                                                               [100%] 1 of 1 ✔
+[26/661e33] process > egapx:target_proteins_plane:miniprot:split_proteins                                                 [100%] 1 of 1 ✔
+[86/68836c] process > egapx:target_proteins_plane:miniprot:run_miniprot (1)                                               [100%] 1 of 1 ✔
+[f1/2d07a3] process > egapx:target_proteins_plane:paf2asn:run_paf2asn (1)                                                 [100%] 1 of 1 ✔
+[05/33457c] process > egapx:target_proteins_plane:best_aligned_prot:run_best_aligned_prot                                 [100%] 1 of 1 ✔
+[41/455b4f] process > egapx:target_proteins_plane:align_filter_sa:run_align_filter_sa                                     [100%] 1 of 1 ✔
+[c9/4627b4] process > egapx:target_proteins_plane:align_sort_sa:run_align_sort                                            [100%] 1 of 1 ✔
+[9b/0b248b] process > egapx:rnaseq_short_plane:star_index:build_index                                                     [100%] 1 of 1 ✔
+[79/799e31] process > egapx:rnaseq_short_plane:star:run_star (1)                                                          [100%] 2 of 2 ✔
+[01/af1f68] process > egapx:rnaseq_short_plane:bam_strandedness:rnaseq_divide_by_strandedness                             [100%] 1 of 1 ✔
+[65/4107dc] process > egapx:rnaseq_short_plane:bam_bin_and_sort:calc_assembly_sizes                                       [100%] 1 of 1 ✔
+[5d/c69fbf] process > egapx:rnaseq_short_plane:bam_bin_and_sort:bam_bin (2)                                               [100%] 2 of 2 ✔
+[c1/707e59] process > egapx:rnaseq_short_plane:bam_bin_and_sort:merge_prepare                                             [100%] 1 of 1 ✔
+[e3/bba172] process > egapx:rnaseq_short_plane:bam_bin_and_sort:merge (1)                                                 [100%] 1 of 1 ✔
+[2b/7c7b6a] process > egapx:rnaseq_short_plane:bam2asn:convert (1)                                                        [100%] 1 of 1 ✔
+[23/3a9fba] process > egapx:rnaseq_short_plane:rnaseq_collapse:generate_jobs                                              [100%] 1 of 1 ✔
+[b8/994db8] process > egapx:rnaseq_short_plane:rnaseq_collapse:run_rnaseq_collapse (8)                                    [100%] 9 of 9 ✔
+[da/f769f6] process > egapx:rnaseq_short_plane:rnaseq_collapse:run_gpx_make_outputs                                       [100%] 1 of 1 ✔
+[af/c32ba6] process > egapx:gnomon_plane:chainer:run_align_sort (1)                                                       [100%] 1 of 1 ✔
+[7f/bed27d] process > egapx:gnomon_plane:chainer:generate_jobs                                                            [100%] 1 of 1 ✔
+[4a/cdb342] process > egapx:gnomon_plane:chainer:run_chainer (7)                                                          [100%] 16 of 16 ✔
+[7c/b687bb] process > egapx:gnomon_plane:chainer:run_gpx_make_outputs                                                     [100%] 1 of 1 ✔
+[62/e78572] process > egapx:gnomon_plane:gnomon_wnode:gpx_qsubmit                                                         [100%] 1 of 1 ✔
+[62/8445b3] process > egapx:gnomon_plane:gnomon_wnode:annot (1)                                                           [100%] 10 of 10 ✔
+[57/589794] process > egapx:gnomon_plane:gnomon_wnode:gpx_qdump                                                           [100%] 1 of 1 ✔
+[7b/020592] process > egapx:annot_proc_plane:fetch_swiss_prot_asn                                                         [100%] 1 of 1 ✔
+[70/34b131] process > egapx:annot_proc_plane:get_swiss_prot_ids                                                           [100%] 1 of 1 ✔
+[7d/16a826] process > egapx:annot_proc_plane:prot_gnomon_prepare:prot_gnomon_prepare_p                                    [100%] 1 of 1 ✔
+[a3/a6a568] process > egapx:annot_proc_plane:diamond_worker:run_diamond_egap                                              [100%] 1 of 1 ✔
+[97/e54b4a] process > egapx:annot_proc_plane:best_protein_hits:run_protein_filter_replacement                             [100%] 1 of 1 ✔
+[e3/32a317] process > egapx:annot_proc_plane:gnomon_biotype:run_gnomon_biotype                                            [100%] 1 of 1 ✔
+[89/56953c] process > egapx:annot_proc_plane:annot_builder:annot_builder_main                                             [100%] 1 of 1 ✔
+[7c/28df80] process > egapx:annot_proc_plane:annot_builder:annot_builder_input                                            [100%] 1 of 1 ✔
+[19/781bc2] process > egapx:annot_proc_plane:annot_builder:annot_builder_run                                              [100%] 1 of 1 ✔
+[f5/1140c6] process > egapx:annot_proc_plane:print_fake_lxr_data                                                          [100%] 1 of 1 ✔
+[94/0ee74c] process > egapx:annot_proc_plane:orthology_plane:fetch_ortholog_references                                    [100%] 1 of 1 ✔
+[f3/053877] process > egapx:annot_proc_plane:orthology_plane:setup_ext_genome:get_genome_info                             [100%] 1 of 1 ✔
+[bd/5ededd] process > egapx:annot_proc_plane:orthology_plane:setup_ext_proteins:convert_proteins                          [100%] 1 of 1 ✔
+[7d/fa5f13] process > egapx:annot_proc_plane:orthology_plane:get_prot_ref_ids                                             [100%] 1 of 1 ✔
+[82/8018fb] process > egapx:annot_proc_plane:orthology_plane:extract_products_from_models:run_extract_products_from_mo... [100%] 1 of 1 ✔
+[ce/22bdea] process > egapx:annot_proc_plane:orthology_plane:diamond_orthology:run_diamond_egap                           [100%] 1 of 1 ✔
+[ed/0d0cdd] process > egapx:annot_proc_plane:orthology_plane:find_orthologs:run_find_orthologs                            [100%] 1 of 1 ✔
+[56/48bd29] process > egapx:annot_proc_plane:locus_track:run_locus_track                                                  [100%] 1 of 1 ✔
+[95/4ad706] process > egapx:annot_proc_plane:locus_link:run_locus_link                                                    [100%] 1 of 1 ✔
+[1e/a66cb3] process > egapx:annot_proc_plane:final_asn_markup:final_asn                                                   [100%] 1 of 1 ✔
+[f2/391794] process > egapx:annot_proc_plane:annotwriter:run_annotwriter                                                  [100%] 1 of 1 ✔
+[4e/6fccc1] process > egapx:convert_annotations:run_converter                                                             [100%] 1 of 1 ✔
+[8d/e3225f] process > export                                                                                              [100%] 1 of 1 ✔
+Completed at: 30-Oct-2024 11:46:09
+Duration    : 53m 9s
+CPU hours   : 7.0
+Succeeded   : 83
+
+
+Statistics for example_out/complete.genomic.gff
+CDS          33203
+exon         35007
+gene         8828
+lnc_RNA      566
+mRNA         8407
+pseudogene   6
+transcript   4
 ```
+
 ## Output
 
-Look at the output in the out diectory (`example_out`) that was supplied in the command line. The annotation file is called `accept.gff`. 
+Look at the output in the out diectory (`example_out`) that was supplied in the command line. The annotation file is called `complete.genomic.gff`. 
 ```
-accept.gff
 annot_builder_output
+annotated_genome.asn
+annotation_data.cmt
+complete.cds.fna
+complete.genomic.fna
+complete.genomic.gff
+complete.genomic.gtf
+complete.proteins.faa
+complete.transcripts.fna
 nextflow.log
+resume.sh
 run.report.html
 run.timeline.html
 run.trace.txt
 run_params.yaml
+stats
+validated
 ```
-The `nextflow.log` is the log file that captures all the process information and their work directories. `run_params.yaml` has all the parameters that were used in the EGAPx run. More information about the process time and resources can be found in the other run* files.  
+Description of the outputs:
+* `complete.genomic.gff`: final annotation set in GFF3 format.
+* `complete.genomic.gtf`: final annotation set in GTF format.
+* `complete.genomic.fna`: full genome sequences set in FASTA format.
+* `complete.genomic.gtf`: final annotation set in gtf format.
+* `complete.cds.fna`: annotated Coding DNA Sequences (CDS) in FASTA format.
+* `complete.transcripts.fna`: annotated transcripts in FASTA format (includes UTRs).
+* `complete.proteins.faa`: annotated protein products in FASTA format.
+* `annotated_genome.asn`: final annotation set in ASN1 format.
+Description of the logs and miscellaneous outputs:
+* `annot_builder_output/accept.ftable_annot`: intermediate file with accepted annotation models called by GNOMON.
+* `annotation_data.cmt`: annotation structured comment file. Used for submission to GenBank.
+* `nextflow.log`: main Nextflow log that captures all the process information and their work directories.
+* `resume.sh`: Nextflow command for resuming a run from the last successful task.
+* `run.report.html`: Nextflow rendered HTML execution report containing run summary, resource usage, and tasks execution.
+* `run.timeline.html`: Nextflow rendered HTML timeline for all processes executed in the EGAPx pipeline.
+* `run.trace.txt`: Nextflow execution tracing file that contains information about each EGAPx process including runtime and CPU usage.
+* `run_params.yaml`: YAML file containing parameters used for the EGAPx run
+* `stats`: directory containing features statistics for the final annotation set
+* `validated`: directory containing validation warnings and errors for annotated features. Used for submission to GenBank.
 
+## Interpreting Output
 
+`stats/feature_counts.xml` contains summary counts of features by model prediction categories determined by GNOMON.
+
+**NOTE** not all categories are expected to have counts data (e.g. model RefSeq, fully supported, ab initio)
+
+Genes with `major correction` are likely protein-coding genes with frameshifts and/or internal stops. These models include "LOW QUALITY PROTEIN" in the protein FASTA title, are marked up with exception=low-quality sequence region on the mRNA and CDS features, and the annotation is adjusted to meet GenBank criteria (frameshifts are compensated for by 1-2 bp microintrons in the mRNA and CDS features, and internal stops have a transl_except to translate the codon as X instead of a stop). For RefSeq, we set a threshold of no more than 10% of protein-coding genes with major corrections to release the annotation. We recommend users polish assembly sequences if the rate is higher than 10%.
+
+Counts of protein-coding genes should be considered versus similar species. Low counts may result from insufficient supporting evidence (e.g. low RNAseq coverage or an unusual organism compared to the available protein data). High counts may indicate genome fragmentation or noise from genes annotated on transposons.
+
+`stats/feature_stats.xml` contains summary statistics on transcript counts per gene, exon counts per transcript, and the counts and length distributions of features by sub-type.
 
 ## Intermediate files
 
-In the above log, each line denotes the process that completed in the workflow. The first column (_e.g._ `[96/621c4b]`) is the subdirectory where the intermediate output files and logs are found for the process in the same line, _i.e._, `egapx:miniprot:run_miniprot`. To see the intermediate files for that process, you can go to the work directory path that you had supplied and traverse to the subdirectory `96/621c4b`: 
+In the nextflow log, you can find work directory paths for each job. You can go to that path, and look for the output files and command logs. For example, to see the files generated during run_miniprot job, run the following command to get the directory path, and list the files within that directory.
 
 ```
-$ aws s3 ls s3://temp_datapath/D_farinae/96/      
-                           PRE 06834b76c8d7ceb8c97d2ccf75cda4/
-                           PRE 621c4ba4e6e87a4d869c696fe50034/
-$ aws s3 ls s3://temp_datapath/D_farinae/96/621c4ba4e6e87a4d869c696fe50034/
+grep run_miniprot example_out/nextflow.log| grep COMPLETED
+
+aws s3 ls s3://temp_datapath/D_farinae/86/68836c310a571e6752a33a221d1962/
                            PRE output/
-2024-03-27 11:19:18          0 
-2024-03-27 11:19:28          6 .command.begin
-2024-03-27 11:20:24        762 .command.err
-2024-03-27 11:20:26        762 .command.log
-2024-03-27 11:20:23          0 .command.out
-2024-03-27 11:19:18      13103 .command.run
-2024-03-27 11:19:18        129 .command.sh
-2024-03-27 11:20:24        276 .command.trace
-2024-03-27 11:20:25          1 .exitcode
-$ aws s3 ls s3://temp_datapath/D_farinae/96/621c4ba4e6e87a4d869c696fe50034/output/
-2024-03-27 11:20:24   17127134 aligns.paf
+2024-10-30 10:54:36          0 
+2024-10-30 10:59:04          6 .command.begin
+2024-10-30 10:59:33        780 .command.err
+2024-10-30 10:59:35        780 .command.log
+2024-10-30 10:59:32          0 .command.out
+2024-10-30 10:54:36      13013 .command.run
+2024-10-30 10:54:36        139 .command.sh
+2024-10-30 10:59:33        277 .command.trace
+2024-10-30 10:59:34          1 .exitcode
+
+aws s3 ls s3://ncbi-egapx-expires/work/D_farinae/86/68836c310a571e6752a33a221d1962/output/
+2024-10-30 10:59:34   26539116 1.paf
 ```
 
 ## Offline mode
@@ -316,7 +419,7 @@ If you do not have internet access from your cluster, you can run EGAPx in offli
 ```
 rm egap*sif
 singularity cache clean
-singularity pull docker://ncbi/egapx:0.2-alpha
+singularity pull docker://ncbi/egapx:0.3-alpha
 ```
 
 - Clone the repo:
@@ -348,7 +451,7 @@ Now edit the file paths of SRA reads files in `examples/input_D_farinae_small.ya
 - Run `egapx.py` first to edit the `biowulf_cluster.config`:
 ```
 ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
-echo "process.container = '/path_to_/egapx_0.2-alpha.sif'" >> egapx_config/biowulf_cluster.config
+echo "process.container = '/path_to_/egapx_0.3-alpha.sif'" >> egapx_config/biowulf_cluster.config
 ```
 
 - Run `egapx.py`:
@@ -356,6 +459,21 @@ echo "process.container = '/path_to_/egapx_0.2-alpha.sif'" >> egapx_config/biowu
 ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
 
 ```
+
+## Modifying default parameters
+
+The default task parameter values are listed in the file `ui/assets/default_task_params.yaml`. If there are cases where you need to change some task parameters from the default values, you can add those to the input yaml file.  For example, if you're using RNA-seq from species besides the one being annotated, you can relax the alignment criteria by setting the following parameters in your input yaml:
+
+```
+tasks:
+  rnaseq_collapse:
+    rnaseq_collapse: -high-identity 0.8
+  convert_from_bam:
+    sam2asn: -filter 'pct_identity_gap >= 85'
+  star_wnode:
+    star_wnode: -pct-identity 85
+```
+
 
 
 ## References

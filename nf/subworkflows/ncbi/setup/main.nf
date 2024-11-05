@@ -9,7 +9,22 @@ workflow setup_genome {
         organelles
         parameters  // Map : extra parameter and parameter update
     main:
-        get_genome_info(genome, organelles, parameters)
+        get_genome_info(genome, organelles, true, parameters)
+    emit:
+        seqid_list = get_genome_info.out.seqid_list
+        gencoll_asn = get_genome_info.out.gencoll_asn
+        unpacked_genome = get_genome_info.out.fasta
+        genome_asn = get_genome_info.out.genome_asn
+        genome_asnb = get_genome_info.out.genome_asnb
+        max_intron = get_genome_info.out.max_intron
+}
+workflow setup_ext_genome {
+    take:
+        genome
+        organelles
+        parameters  // Map : extra parameter and parameter update
+    main:
+        get_genome_info(genome, organelles, false, parameters)
     emit:
         seqid_list = get_genome_info.out.seqid_list
         gencoll_asn = get_genome_info.out.gencoll_asn
@@ -20,11 +35,13 @@ workflow setup_genome {
 }
 
 
+
 process get_genome_info {
     debug true
     input:
         path fasta_genome_file, stageAs: 'src/*'
         path organelles
+        val  localize_ids
         val  parameters
     output:
         path '*.seqids', emit: 'seqid_list'
@@ -46,7 +63,11 @@ process get_genome_info {
         genome_asn = genome_dir + "/" + base_name_stripped + ".asn"
         genome_asnb = genome_dir + "/" + base_name_stripped + ".asnb"
         max_intron = parameters.max_intron
-        genome_size_threshold = parameters.genome_size_threshold        
+        genome_size_threshold = parameters.genome_size_threshold  
+        lcl_id_cmd = "cat"
+        if(localize_ids) {
+            lcl_id_cmd = "sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/'"
+        } 
     """
     # echo "need_zcat: ${need_zcat}, out_fasta: ${out_fasta}"
     mkdir -p ${genome_dir}
@@ -54,11 +75,11 @@ process get_genome_info {
     if [[ ${need_zcat} == true ]]; then
         # zcat ${fasta_genome_file} | sed 's/^\\(>gi|[0-9]\\+\\)|\\?\\([^ ]\\+\\)\\(.*\\)/\\1\\3/' > ${out_fasta}
         # zcat ${fasta_genome_file} > ${out_fasta}
-        zcat ${fasta_genome_file} | sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/' > ${out_fasta}
+        zcat ${fasta_genome_file} | ${lcl_id_cmd} > ${out_fasta}
     else
         # sed 's/^\\(>gi|[0-9]\\+\\)|\\?\\([^ ]\\+\\)\\(.*\\)/\\1\\3/' ${fasta_genome_file} > ${out_fasta}
         # mv ${fasta_genome_file} ${out_fasta}
-        sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/' ${fasta_genome_file} > ${out_fasta}
+        ${lcl_id_cmd} ${fasta_genome_file} > ${out_fasta}
     fi
     # Old way, now use gc_get_molecules. For multipart ids with gi first use the second part
     # grep -oP "^>\\K[^ ]+" ${out_fasta} | sed 's/^\\(gi|[0-9]\\+\\)|\\([^|]\\+|[^|]\\+\\)|\\?/\\2/' >list.seqids
@@ -114,17 +135,29 @@ workflow setup_proteins {
         proteins
         parameters  // Map : extra parameter and parameter update
     main:
-        convert_proteins(proteins)
+        convert_proteins(proteins, true)
     emit:
         unpacked_proteins = convert_proteins.out.unpacked_proteins
         proteins_asn = convert_proteins.out.proteins_asn
         proteins_asnb = convert_proteins.out.proteins_asnb
 }
 
+workflow setup_ext_proteins {
+    take:
+        proteins
+        parameters  // Map : extra parameter and parameter update
+    main:
+        convert_proteins(proteins, false)
+    emit:
+        unpacked_proteins = convert_proteins.out.unpacked_proteins
+        proteins_asn = convert_proteins.out.proteins_asn
+        proteins_asnb = convert_proteins.out.proteins_asnb
+}
 
 process convert_proteins {
     input:
         path fasta_proteins_file, stageAs: 'src/*'
+        val  localize_ids
     output:
         path out_fasta, emit: 'unpacked_proteins'
         path proteins_asn, emit: 'proteins_asn'
@@ -139,13 +172,17 @@ process convert_proteins {
         out_fasta = fasta_dir + "/" + fasta_name
         proteins_asn = asn_dir + "/" + base_name_stripped + ".asn"
         proteins_asnb = asn_dir + "/" + base_name_stripped + ".asnb"
+        lcl_id_cmd = "cat"
+        if(localize_ids) {
+            lcl_id_cmd = "sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/'"
+        }
     """
     mkdir -p ${asn_dir}
     mkdir -p ${fasta_dir}
     if [[ ${need_zcat} == true ]]; then
-        zcat ${fasta_proteins_file} | sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/' > ${out_fasta}
+        zcat ${fasta_proteins_file} | ${lcl_id_cmd} > ${out_fasta}
     else
-        sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/' ${fasta_proteins_file} > ${out_fasta}
+        ${lcl_id_cmd} ${fasta_proteins_file} > ${out_fasta}
     fi
     multireader -flags ParseRawID -out-format asn_text -input ${out_fasta} -output ${proteins_asn}
     multireader -flags ParseRawID -out-format asn_binary -input ${out_fasta} -output ${proteins_asnb}

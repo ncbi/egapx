@@ -4,14 +4,17 @@
 
 nextflow.enable.dsl=2
 
-include { sra_query } from './sra_qry/main'
-include { fetch_sra_fasta } from './fetch_sra_fasta/main'
-include { star_index } from './star_index/main'
-include { star_wnode as star } from './star_wnode/main'
-include { bam_strandedness } from './bam_strandedness/main'
-include { bam_bin_and_sort } from './bam_bin_and_sort/main'
-include { bam2asn } from './convert_from_bam/main'
-include { rnaseq_collapse } from './rnaseq_collapse/main'
+params.import_prefix = "../../../../nf/subworkflows/ncbi/" // redirected during testing
+
+include { sra_query } from "./${params.import_prefix}rnaseq_short/sra_qry/main"
+include { fetch_sra_fasta } from "./${params.import_prefix}rnaseq_short/fetch_sra_fasta/main"
+include { star_index } from "./${params.import_prefix}rnaseq_short/star_index/main"
+include { star_wnode as star } from "./${params.import_prefix}rnaseq_short/star_wnode/main"
+include { bam_strandedness } from "./${params.import_prefix}rnaseq_short/bam_strandedness/main"
+include { bam_bin_and_sort } from "./${params.import_prefix}rnaseq_short/bam_bin_and_sort/main"
+include { bam2asn } from "./${params.import_prefix}rnaseq_short/convert_from_bam/main"
+include { rnaseq_collapse } from "./${params.import_prefix}rnaseq_short/rnaseq_collapse/main"
+
 
 params.intermediate = false
 
@@ -52,9 +55,12 @@ workflow rnaseq_short_plane {
                 (sra_metadata, sra_run_list) = sra_query(query, task_params.get('sra_qry', [:]))
                 def reads_fasta_pairs = fetch_sra_fasta(sra_run_list, task_params.get('fetch_sra_fasta', [:]))
                 (ch_align, ch_align_index) = star(scaffolds, reads_fasta_pairs, genome_asn, index, max_intron, task_params.get('star_wnode', [:]))
-            } else {
+            } else if (ch_reads) {
                 sra_metadata = reads_metadata
                 (ch_align, ch_align_index) = star(scaffolds, ch_reads, genome_asn, index, max_intron, task_params.get('star_wnode', [:]))
+            } else {
+                sra_metadata = reads_metadata
+                (ch_align, ch_align_index) = star(scaffolds, reads, genome_asn, index, max_intron, task_params.get('star_wnode', [:]))
             }
             //
 

@@ -13,7 +13,7 @@ workflow bam_bin_and_sort {
         parameters      // Map : extra parameter and parameter update
     main:
         def assembly_sizes = calc_assembly_sizes(ch_bam.collect())
-        def bam_bin_params = "-avg-size-per-bin 200000000 -file-pattern 'bin#.bam' -exclude-organelle"
+        def bam_bin_params = " -file-pattern 'bin#.bam' "
         out = bam_bin(ch_bam, ch_index, genome, organelle, assembly_sizes, merge_params(bam_bin_params, parameters, 'bam_bin'))
         bins = out.collect()
         merge_args = merge_prepare(bins)

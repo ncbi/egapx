@@ -45,6 +45,7 @@ workflow chainer_wnode {
         chains_slices = run_gpx_make_outputs.out.chains_slices
         evidence = run_gpx_make_outputs.out.evidence
         evidence_slices = run_gpx_make_outputs.out.evidence_slices
+        all = run_gpx_make_outputs.out.all
 }
 
 
@@ -85,6 +86,7 @@ process generate_jobs {
 
 
 process run_chainer {
+    label 'long_job'
     input:
         path job
         path alignments
@@ -147,6 +149,7 @@ process run_gpx_make_outputs {
         path "output/chains.*.out.gz.slices", emit: 'chains_slices'
         path "output/evidence.*.out.gz", emit: 'evidence', optional: true
         path "output/evidence.*.out.gz.slices", emit: 'evidence_slices', optional: true
+        path "output/*", emit: 'all'
     script:
     """
     ls -1 gpx_inputs/* > gpx_inputs.mft

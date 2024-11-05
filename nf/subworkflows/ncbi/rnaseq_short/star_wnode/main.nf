@@ -3,17 +3,21 @@ nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
 
+params.verbose = false
 
-def get_effective_params(parameters, use_zcat, max_intron) {
+
+def get_effective_params(parameters, use_zcat, max_intron, cpus) {
     def effective_star_params = ""
     // Check that parameters for star_wnode doesn't contain 'star-params'
     boolean back_compat = parameters.get("star_wnode", "").contains("-star-params")
     if (!back_compat) {
-        def star_params = "--alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax 50 --runThreadN 16 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes 'NH HI AS nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange 50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None"
+        def star_params = "--alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax 50 --runThreadN ${cpus} --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes 'NH HI AS nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange 50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None"
         effective_star_params = ' -star-params "' + (use_zcat ? "--readFilesCommand zcat " : "") + merge_params(star_params, parameters, 'star-params') + '"'
     }
-    def default_params = "-cpus-per-worker 4 -csi-threshold 512000000 -max-intron ${max_intron} -preserve-star-logs"
+    def default_params = "-cpus-per-worker ${cpus} -csi-threshold 0 -max-intron ${max_intron} -preserve-star-logs"
     def effective_params = merge_params(default_params, parameters, 'star_wnode') + effective_star_params
+    // Force CSI threshold to 0 to always use CSI
+    effective_params = effective_params.replaceAll(/-csi-threshold [0-9]+/, "-csi-threshold 0")
     if (!back_compat) {
         // Ad-hoc post processing - remove single quotes from effective_params
         effective_params = effective_params.replaceAll("'", "")
@@ -35,7 +39,7 @@ process run_star {
         val  parameters
     output:
         path "*-Aligned.out.Sorted.bam", emit: 'align'
-        path "*-Aligned.out.Sorted.bam.bai", emit: 'align_index'
+        path "*-Aligned.out.Sorted.bam.csi", emit: 'align_index'
         // path "per_run_counts.txt", emit: 'per_run_counts'
     script:
         def assembly=genome_file.baseName.toString().replaceFirst(/\.(fa(sta)?|asn[bt]?)$/, "")
@@ -47,8 +51,13 @@ process run_star {
             query_str = fasta_rna_file[0]
             seqkit_cmd = "seqkit stats ${fasta_rna_file[0]} "
         }
-        def effective_params = get_effective_params(parameters, use_zcat, max_intron)
-        // println("Effective STAR parameters: $effective_params")
+        // For some executors (e.g. SGE) the task.cpus is not set correctly, they allocate correct number of threads through clusterOptions.
+        // We use ext.cpus to pass the number of cpus here and use clusterOptions to allocate large enough instance
+        def cpus = task.cpus == 1 && task.ext.cpus ? task.ext.cpus : task.cpus
+        def effective_params = get_effective_params(parameters, use_zcat, max_intron, cpus)
+        if (params.verbose) {
+            println("Effective STAR parameters: $effective_params")
+        }
     """
     echo "Assembly: ${assembly} sampleID: ${sampleID} Query: ${query_str}"
     echo "${seqid_list.join('\n')}" > seqid_list.mft
@@ -66,11 +75,12 @@ process run_star {
     stub:
         def assembly=genome_file.baseName.toString().replaceFirst(/\.(fa(sta)?|asn[bt]?)$/, "")
         println("Assembly: ${assembly} sampleID: ${sampleID}, max_intron: ${max_intron}")
-        def effective_params = get_effective_params(parameters, use_zcat, max_intron)
+        def cpus = task.cpus == 1 && task.ext.cpus ? task.ext.cpus : task.cpus
+        def effective_params = get_effective_params(parameters, use_zcat, max_intron, cpus)
         println("Effective STAR parameters: $effective_params")
     """
     touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam
-    touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam.bai
+    touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam.csi
     """
 }
 

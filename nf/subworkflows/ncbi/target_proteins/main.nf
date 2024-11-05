@@ -4,11 +4,13 @@
 
 nextflow.enable.dsl=2
 
-include { miniprot } from './miniprot/main'
-include { align_filter_sa } from './align_filter_sa/main'
-include { best_aligned_prot } from './best_aligned_prot/main'
-include { paf2asn } from './paf2asn/main'
-include { run_align_sort} from '../default/align_sort_sa/main'
+params.import_prefix = "../../../../nf/subworkflows/ncbi/" // redirected during testing
+
+include { miniprot } from "./${params.import_prefix}target_proteins/miniprot/main"
+include { align_filter_sa } from "./${params.import_prefix}target_proteins/align_filter_sa/main"
+include { best_aligned_prot } from "./${params.import_prefix}target_proteins/best_aligned_prot/main"
+include { paf2asn } from "./${params.import_prefix}target_proteins/paf2asn/main"
+include { align_sort_sa} from "./${params.import_prefix}target_proteins/../default/align_sort_sa/main"
 
 params.intermediate = false
 
@@ -30,8 +32,7 @@ workflow target_proteins_plane {
         def converted_asn = paf2asn.out.asn_file
         best_aligned_prot(genome_asn, proteins_asn, converted_asn.collect(), gencoll_asn, task_params.get('best_aligned_prot', [:]))
         align_filter_sa(genome_asn, proteins_asn, best_aligned_prot.out.asn_file, task_params.get('align_filter_sa', [:]))
-        run_align_sort(genome_asn, proteins_asn,align_filter_sa.out.filtered_file,
-            "-k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count" )
+        align_sort_sa(genome_asn, proteins_asn,align_filter_sa.out.filtered_file, task_params.get('align_sort_sa', [:]))
     emit:
-        protein_alignments = run_align_sort.out
+        protein_alignments = align_sort_sa.out
 }
