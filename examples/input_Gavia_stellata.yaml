@@ -1,3 +1,6 @@
-genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/030/936/135/GCF_030936135.1_bGavSte3.hap2/GCF_030936135.1_bGavSte3.hap2_genomic.fna.gz
+genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/030/936/135/GCA_030936135.1_bGavSte3.hap2/GCA_030936135.1_bGavSte3.hap2_genomic.fna.gz
 reads: txid37040[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession]
 taxid: 37040
+annotation_provider: GenBank submitter
+annotation_name_prefix: GCA_030936135.1
+locus_tag_prefix: egapxtmp

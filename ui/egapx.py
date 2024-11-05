@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # requires pip install pyyaml
 #
+from errno import ENOENT
 import shlex
 import shutil
 import sys
@@ -24,9 +25,17 @@ import stat
 
 import yaml
 
+software_version = "0.3.0-alpha"
+
 VERBOSITY_DEFAULT=0
 VERBOSITY_QUIET=-1
 VERBOSITY_VERBOSE=1
+
+# Clades with exceptional treatment
+PLANTS=33090
+VERTEBRATES=7742
+MAMMALS=40674
+MAGNOLIOPSIDA=3398
 
 FTP_EGAP_PROTOCOL = "https"
 FTP_EGAP_SERVER = "ftp.ncbi.nlm.nih.gov"
@@ -49,11 +58,13 @@ def parse_args(argv):
     parser.add_argument("-n", "--dry-run", action="store_true", default=False)
     parser.add_argument("-st", "--stub-run", action="store_true", default=False)
     parser.add_argument("-so", "--summary-only", help="Print result statistics only if available, do not compute result", action="store_true", default=False)
+    parser.add_argument("-ot", "--ortho-taxid", default=0, help="Taxid of reference data for orthology tasks")
     group = parser.add_argument_group('download')
     group.add_argument("-dl", "--download-only", help="Download external files to local storage, so that future runs can be isolated", action="store_true", default=False)
     parser.add_argument("-lc", "--local-cache", help="Where to store the downloaded files", default="")
     parser.add_argument("-q", "--quiet", dest='verbosity', action='store_const', const=VERBOSITY_QUIET, default=VERBOSITY_DEFAULT)
     parser.add_argument("-v", "--verbose", dest='verbosity', action='store_const', const=VERBOSITY_VERBOSE, default=VERBOSITY_DEFAULT)
+    parser.add_argument("-V", "--version", dest='report_version', help="Report software version", action='store_true', default=False)
     parser.add_argument("-fn", "--func_name", help="func_name", default="")
     return parser.parse_args(argv[1:])
 
@@ -161,6 +172,20 @@ class FtpDownloader:
                     ##time.sleep(0.1)
             ## else: . or .. do nothing
 
+    def list_ftp_dir(self, ftp_path):
+        fl = []
+        try: 
+            fl = self.ftp.mlsd(ftp_path)
+        except:
+            return list()
+        rl = list()
+        for ftp_item in fl:
+            ftp_type = ftp_item[1]['type']
+            if ftp_type=='dir' or ftp_type=='cdir' or ftp_type=='pdir':
+                continue
+            name = ftp_item[0]
+            rl.append(name)
+        return rl
 
 def download_egapx_ftp_data(local_cache_dir):
     global user_cache_dir
@@ -198,32 +223,37 @@ def repackage_inputs(run_inputs):
     return new_inputs
 
 
-def convert_value(value):
+def convert_value(value, key, strict):
     "Convert paths to absolute paths when possible, look into objects and lists"
     if isinstance(value, dict):
-        return {k: convert_value(v) for k, v in value.items()}
+        return {k: convert_value(v, key, strict) for k, v in value.items()}
     elif isinstance(value, list):
-        return [convert_value(v) for v in value]
+        return [convert_value(v, key, strict) for v in value]
     else:
-        if value == '' or re.match(r'[a-z0-9]{2,5}://', value) or not os.path.exists(value):
+        if not isinstance(value, str) or value == '' or re.match(r'[a-z0-9]{2,5}://', value):
             # do not convert - this is a URL or empty string or non-file
             return value
+        if not os.path.exists(value):
+            if strict:
+                raise OSError(ENOENT, f"File for parameter '{key}' doesn't exist", value)
+            else:
+                return value
         # convert to absolute path
-        return str(Path(value).absolute())
+        return str(Path(value).resolve())
 
 
-path_inputs = { 'genome', 'hmm', 'softmask', 'reads_metadata', 'organelles', 'proteins', 'reads', 'rnaseq_alignments', 'protein_alignments' }
+path_inputs = {'genome', 'hmm', 'softmask', 'reads_metadata', 'organelles',
+               'proteins', 'proteins_trusted', 'reads',
+               'rnaseq_alignments', 'protein_alignments', 'ortho', 'reference_sets' }
 def convert_paths(run_inputs):
     "Convert paths to absolute paths where appropriate"
     input_root = run_inputs['input']
     for key in input_root:
         if key in path_inputs:
-            if isinstance(input_root[key], list):
-                input_root[key] = [convert_value(v) for v in input_root[key]]
-            else:
-                input_root[key] = convert_value(input_root[key])
+            strict = key != 'reads'
+            input_root[key] = convert_value(input_root[key], key, strict)
     if 'output' in run_inputs:
-        run_inputs['output'] = convert_value(run_inputs['output'])
+        run_inputs['output'] = convert_value(run_inputs['output'], 'output', False)
 
 
 def prepare_reads(run_inputs):
@@ -232,45 +262,75 @@ def prepare_reads(run_inputs):
     if 'reads' not in run_inputs['input'] or 'output' not in run_inputs:
         return
     prefixes = defaultdict(list)
+    has_files = False
     reads = run_inputs['input']['reads']
     if type(reads) == str:
         del run_inputs['input']['reads']
-        run_inputs['input']['reads_query'] = reads
-        return
+        if os.path.exists(reads):
+            has_files = True
+            with open(reads) as f:
+                # Parse lines into run name and read file
+                for line in f:
+                    line = line.strip()
+                    if not line or line[0] == '#':
+                        continue
+                    mo = re.match(r'([^ \t]+)[ \t]+(.*)', line)
+                    if mo:
+                        prefixes[mo.group(1)].append(mo.group(2))
+        else:
+            run_inputs['input']['reads_query'] = reads
+            return
+    else:
+        for rf in run_inputs['input']['reads']:
+            if type(rf) == str:
+                name = Path(rf).parts[-1]
+                mo = re.match(r'([^._]+)', name)
+                if mo and mo.group(1) != name:
+                    has_files = True
+                    prefixes[mo.group(1)].append(rf)
+            elif type(rf) == list:
+                has_files = True
+                # find if rf is a tuple already in 'fromPairs' format, that is [sample_id, [read1, read2]]
+                if len(rf) == 2 and type(rf[0]) == str and type(rf[1]) == list:
+                    for r in rf[1]:
+                        if type(r) != str:
+                            raise Exception("Invalid read input")
+                        prefixes[rf[0]].append(r)
+                else:
+                    # rf is a list of files, we follow star_wnode algorithm to find 'sample_id'
+                    names = list(map(lambda x: re.match(r'([^.]+)', Path(x).parts[-1]).group(1), rf))
+                    # Find common prefix
+                    names.sort()
+                    if len(names) == 1:
+                        sample_id = names[0]
+                    else:
+                        for i in range(min(len(names[0]), len(names[-1]))):
+                            if names[0][i] != names[-1][i]:
+                                break
+                        sample_id = names[0][0:i]
+                    # Dont end prefix with . or _
+                    i = len(sample_id) - 1
+                    while i > 0 and sample_id[-1] in "._":
+                        sample_id = sample_id[:-1]
+                        i -= 1
+                    prefixes[sample_id] = rf
     # Create fake metadata file for reads containing only one meaningful information piece - pairedness
     # Have an entry in this file only for SRA runs - files with prefixes SRR, ERR, and DRR and digits
     # Non-SRA reads are handled by rnaseq_collapse internally
-    has_files = False
-    for rf in run_inputs['input']['reads']:
-        if type(rf) == str:
-            name = Path(rf).parts[-1]
-            mo = re.match(r'([^._]+)', name)
-            if mo and mo.group(1) != name:
-                has_files = True
-                prefixes[mo.group(1)].append(rf)
-        elif type(rf) == list:
-            has_files = True
-            names = list(map(lambda x: re.match(r'([^.]+)', Path(x).parts[-1]).group(1), rf))
-            # Find common prefix
-            names.sort()
-            if len(names) == 1:
-                sample_id = names[0]
-            else:
-                for i in range(min(len(names[0]), len(names[-1]))):
-                    if names[0][i] != names[-1][i]:
-                        break
-                sample_id = names[0][0:i]
-            # Dont end prefix with . or _
-            i = len(sample_id) - 1
-            while i > 0 and sample_id[-1] in "._":
-                sample_id = sample_id[:-1]
-                i -= 1
-            prefixes[sample_id] = rf
     if has_files: # len(prefixes):
         # Always create metadata file even if it's empty
         output = run_inputs['output']
         with tempfile.NamedTemporaryFile(mode='w', delete=False, dir=output, prefix='egapx_reads_metadata_', suffix='.tsv') as f:
             for k, v in prefixes.items():
+                # Check file names in v for matching SRR pattern
+                mos = [ re.search(r'([SDE]RR[0-9]+)', x) for x in v ]
+                # Distinct SRRs
+                srrs = list(set([ mo.group(1) for mo in mos if mo ]))
+                if len(srrs) > 1:
+                    print(f"Error: Run set {k} has multiple run ids in read files: {srrs}")
+                    sys.exit(1)
+                if srrs:
+                    k = srrs[0]
                 if re.fullmatch(r'([DES]RR[0-9]+)', k):
                     paired = 'paired' if len(v) == 2 else 'unpaired'
                     # SRR9005248	NA	paired	2	2	NA	NA	NA	NA	NA	NA	NA	0
@@ -282,6 +342,99 @@ def prepare_reads(run_inputs):
     elif reads:
         del run_inputs['input']['reads']
         run_inputs['input']['reads_query'] = "[Accession] OR ".join(reads) + "[Accession]"
+
+
+
+'''
+from /src/internal/gpipe/app/locusXref/populate_tax_tables.cpp
+
+278         bool fish_lineage = lineage.find("Actinopterygii") != string::npos ||
+279                             lineage.find("Coelacanthimorpha") != string::npos ||
+280                             lineage.find("Chondrichthyes") != string::npos ||
+281                             lineage.find("Dipnoi") != string::npos;
+282         int pub_stat = 4, use_in_lxr_client = 1, pref_map_link_type = 448;
+283         int tax_id_name_auth = 0;
+284         if(gbdiv == "gbdiv_vrt" && fish_lineage) {
+285             tax_id_name_auth = 7955;
+286         } else if(gbdiv == "gbdiv_pri" || gbdiv == "gbdiv_mam"
+287             || gbdiv == "gbdiv_vrt" || gbdiv == "gbdiv_rod") {
+288             tax_id_name_auth = 9606;
+289         } else if(gbdiv == "gbdiv_pln") {
+290             tax_id_name_auth = 3702;
+291         } else if(gbdiv == "gbdiv_inv" &&
+292                  (lineage.find("Insecta") != string::npos ||
+293                   lineage.find("Arthropoda") != string::npos))
+294         {
+295             tax_id_name_auth = 7227;
+296         }
+297         string symbol_format_class = "allupper";
+298         string symbol_format = "[A-Z][A-Z0-9][-A-Z0-9]%";
+299         if(tax_id_name_auth == 7227) {
+300             symbol_format_class = "NULL";
+301             symbol_format = "NULL";
+302         } else if(gbdiv == "gbdiv_rod" || gbdiv == "gbdiv_inv") {
+303             symbol_format_class = "uplow";
+304             symbol_format = "[A-Z][a-z0-9][-a-z0-9]%";
+305         }
+306         if(fish_lineage) {
+307             //if looks like a fish
+308             symbol_format_class = "alllow";
+309             symbol_format = "[a-z][a-z0-9][-a-z0-9]%";
+310         }
+'''
+def get_symbol_format_class_for_taxid(taxid):
+    #print('e:get_symbol_format_class_for_taxid')
+    #print(f'taxid: {taxid}')
+    lineage, ranks = get_lineage(taxid)
+    #print(f'lineage: {lineage}')
+    #print(f'ranks: {ranks}')
+
+    format_class = ''
+
+    ACTINOPTERYGII = 7898
+    COELACANTHIMORPHA = 118072
+    CHONDRICHTHYES = 7777
+    DIPNOMORPHA = 7878
+    FISH = [ACTINOPTERYGII,COELACANTHIMORPHA,CHONDRICHTHYES,DIPNOMORPHA]
+    PRIMATE = 9443
+    MAMMAL = 40674
+    RODENT = 9989
+    VERTEBRATE = 7742
+    ANIMALS = 33208   
+    ## define gbdiv_inv as has ANIMALS but not VERTEBRATE
+    INSECTA = 50557
+    ARTHROPOD = 6656
+    VIRIDIPLANTAE = 33090
+    LEPIDOSAURS = 8504 
+    AMPHIBIANS = 8292 
+
+
+    #test_taxids = [7898, 9989, 7742, 6656, 33090]
+    #for tt in test_taxids:
+    #    print(f'  ct:  {tt} {lineage.count(tt)}')
+   
+    is_fish = [i for i in lineage if i in FISH]
+    is_invert = (ANIMALS in lineage) and not (VERTEBRATE in lineage)
+    
+    #print(f'is_fish: {is_fish}')
+    #print(f'is_invert: {is_invert}')
+    #print(f'ANIM: {(ANIMALS in lineage)}')
+    #print(f'VERT: {(VERTEBRATE in lineage)}')
+    #print(f'INSE: {(INSECTA in lineage)}')
+    #print(f'ARTH: {(ARTHROPOD in lineage)}')
+    #print(f'LEPI: {(LEPIDOSAURS in lineage)}')
+    #print(f'AMPH: {(AMPHIBIANS in lineage)}')
+
+    format_class = 'allupper'
+    if is_invert and (INSECTA in lineage or ARTHROPOD in lineage):
+        format_class = 'NULL'
+    elif (RODENT in lineage) or is_invert:
+        format_class = 'uplow'
+    elif (LEPIDOSAURS in lineage) or (AMPHIBIANS in lineage) or is_fish:
+        format_class = 'alllow'
+
+    #print('x:get_symbol_format_class_for_taxid')
+    return format_class
 
 
 def expand_and_validate_params(run_inputs):
@@ -299,13 +452,17 @@ def expand_and_validate_params(run_inputs):
 
     taxid = inputs['taxid']
 
+    if 'symbol_format_class' not in inputs:
+        symbol_format_class = get_symbol_format_class_for_taxid(taxid)
+        inputs['symbol_format_class'] = symbol_format_class
+
     if 'genome' not in inputs:
         print("ERROR: Missing parameter: 'genome'")
         return False
 
     # Check for proteins input and if empty or no input at all, add closest protein bag
     if 'proteins' not in inputs:
-        proteins = get_closest_protein_bag(taxid)
+        proteins,trusted = get_closest_protein_bag(taxid)
         if not proteins:
             # Proteins are not specified explicitly and not found by taxid
             print(f"ERROR: Proteins are not found for tax id {inputs['taxid']}")
@@ -313,6 +470,8 @@ def expand_and_validate_params(run_inputs):
             print("  You can specify proteins manually using 'proteins' parameter")
             return False
         inputs['proteins'] = proteins
+        if trusted:
+            inputs['proteins_trusted'] = trusted
 
     has_rnaseq = 'reads' in inputs or 'reads_ids' in inputs or 'reads_query' in inputs
     if not has_rnaseq:
@@ -323,12 +482,12 @@ def expand_and_validate_params(run_inputs):
             return False
 
     if 'hmm' not in inputs:
-        best_taxid, best_hmm = get_closest_hmm(taxid)
+        best_hmm, good_match = get_closest_hmm(taxid)
         inputs['hmm'] = best_hmm
-        inputs['hmm_taxid'] = best_taxid
+        inputs['train_hmm'] = not good_match
     else:
         # We assume the user knows what they're doing and the training is not necessary
-        inputs['hmm_taxid'] = taxid
+        inputs['train_hmm'] = False
 
     if 'max_intron' not in inputs:
         max_intron, genome_size_threshold = get_max_intron(taxid)
@@ -337,6 +496,38 @@ def expand_and_validate_params(run_inputs):
     else:
         # Given max_intron is a hard limit, no further calculation is necessary
         inputs['genome_size_threshold'] = 0
+    
+    if 'ortho' not in inputs or inputs['ortho'] is None or len(inputs['ortho']) < 4:
+        ortho_files = dict()
+        if 'ortho' in inputs and isinstance(inputs['ortho'], dict):
+            ortho_files = inputs['ortho']
+
+        chosen_taxid=0
+        if 'taxid' in ortho_files:
+            chosen_taxid = ortho_files['taxid']
+        if chosen_taxid == 0: 
+            chosen_taxid = get_closest_ortho_ref_taxid(taxid)
+        ortho_files['taxid'] = chosen_taxid
+        
+        file_id = ['genomic.fna', 'genomic.gff', 'protein.faa']
+        
+        possible_files = []
+        try:
+            possible_files = get_files_under_path('ortholog_references', f'{chosen_taxid}/current')
+        except: 
+            print(f'Could not find path for ortho taxid {chosen_taxid}')
+            return False
+        for pf in possible_files:
+            for fi in file_id:
+                if fi in ortho_files:
+                    continue
+                if pf.find(fi) > -1:
+                    ortho_files[fi] = pf
+        
+        ortho_files['name_from.rpt'] = get_file_path('ortholog_references',f'{chosen_taxid}/name_from_ortholog.rpt')
+        inputs['ortho'] = ortho_files
+    if 'reference_sets' not in inputs or inputs['reference_sets'] is None:
+        inputs['reference_sets'] = get_file_path('reference_sets', 'swissprot.asnb.gz')
 
     return True
 
@@ -369,6 +560,13 @@ def get_cache_dir():
 
 data_version_cache = {}
 def get_versioned_path(subsystem, filename):
+    """
+    Retrieve the versioned path for a given subsystem and filename.
+
+    Checks the cache for the subsystem version, and if not available,
+    downloads the manifest file to populate the cache. Returns the path
+    including the version if found; otherwise, returns the default path.
+    """
     global data_version_cache
     global user_cache_dir
     if not data_version_cache:
@@ -415,6 +613,31 @@ def get_file_path(subsystem, filename):
         return file_path
     return file_url
 
+def get_files_under_path(subsystem, part_path):
+    cache_dir = get_cache_dir()
+    vfn = get_versioned_path(subsystem, part_path)
+    file_path = os.path.join(cache_dir, vfn)
+    file_url = f"{FTP_EGAP_ROOT}/{vfn}"
+    ## look under file_path
+    files_below = list()
+    try:
+        for i in Path(file_path).iterdir():
+            files_below.append(str(i))
+        if files_below:
+            return files_below
+    except:
+        None
+    ## if nothing, look under file_url
+    if not files_below:
+        ftpd = FtpDownloader()
+        ftpd.connect(FTP_EGAP_SERVER)
+        ftp_dir = f'{FTP_EGAP_ROOT_PATH}/{vfn}'
+        files_found = ftpd.list_ftp_dir(ftp_dir)
+        files_online = list()
+        for i in files_found:
+            files_online.append(  f"{FTP_EGAP_ROOT}/{vfn}/{i}")  ### .replace('//','/') ) 
+        return files_online
+    return list()
 
 def get_config(script_directory, args):
     config_file = ""
@@ -459,12 +682,13 @@ def get_config(script_directory, args):
 lineage_cache = {}
 def get_lineage(taxid):
     global lineage_cache
+    ranks = {}
     if not taxid:
-        return []
+        return [], {}
     if taxid in lineage_cache:
         return lineage_cache[taxid]
     # Try cached taxonomy database
-    taxonomy_db_name = os.path.join(get_cache_dir(), get_versioned_path("taxonomy", "taxonomy4blast.sqlite3"))
+    taxonomy_db_name = os.path.join(get_cache_dir(), get_versioned_path("taxonomy", "taxonomy.sqlite3"))
     if os.path.exists(taxonomy_db_name):
         conn = sqlite3.connect(taxonomy_db_name)
         if conn:
@@ -472,20 +696,30 @@ def get_lineage(taxid):
             lineage = [taxid]
             cur_taxid = taxid
             while cur_taxid != 1:
-                c.execute("SELECT parent FROM TaxidInfo WHERE taxid = ?", (cur_taxid,))
-                cur_taxid = c.fetchone()[0]
-                lineage.append(cur_taxid)
+                c.execute("SELECT parent, rank FROM TaxidInfo WHERE taxid = ?", (cur_taxid,))
+                parent, rank = c.fetchone()
+                if rank:
+                    ranks[cur_taxid] = rank
+                lineage.append(parent)
+                cur_taxid = parent
             lineage.reverse()
-            lineage_cache[taxid] = lineage
-            return lineage
+            lineage_cache[taxid] = lineage, ranks
+            return lineage, ranks
     
     # Fallback to API
     taxon_json_file = urlopen(dataset_taxonomy_url+str(taxid))
     taxon = json.load(taxon_json_file)["taxonomy_nodes"][0]
     lineage = taxon["taxonomy"]["lineage"]
     lineage.append(taxon["taxonomy"]["tax_id"])
-    lineage_cache[taxid] = lineage
-    return lineage
+
+    ranks_file = urlopen(dataset_taxonomy_url+",".join(map(str, lineage)))
+    nodes = json.load(ranks_file)["taxonomy_nodes"]
+    for node in nodes:
+        if 'rank' in node["taxonomy"]:
+            ranks[node["taxonomy"]["tax_id"]] = node["taxonomy"]["rank"]
+
+    lineage_cache[taxid] = lineage, ranks
+    return lineage, ranks
 
 
 def get_tax_file(subsystem, tax_path):
@@ -502,7 +736,7 @@ def get_tax_file(subsystem, tax_path):
 
 def get_closest_protein_bag(taxid):
     if not taxid:
-        return ''
+        return '',''
 
     taxids_file = get_tax_file("target_proteins", "taxid.list")
     taxids_list = []
@@ -515,7 +749,7 @@ def get_closest_protein_bag(taxid):
             t = parts[0]
             taxids_list.append(int(t))
 
-    lineage = get_lineage(taxid)
+    lineage, _ = get_lineage(taxid)
 
     best_taxid = None
     best_score = 0
@@ -529,14 +763,34 @@ def get_closest_protein_bag(taxid):
             best_taxid = t
 
     if best_score == 0:
-        return ''
+        return '',''
     # print(best_taxid, best_score)
-    return get_file_path("target_proteins", f"{best_taxid}.faa.gz")
+    protein_file = get_file_path("target_proteins", f"{best_taxid}.faa.gz")
+    trusted_file = get_file_path("target_proteins", f"{best_taxid}.trusted_proteins.gi")
+    return protein_file,trusted_file
 
 
 def get_closest_hmm(taxid):
+    """
+    Given a taxid, this function returns the closest HMM parameters file and a boolean indicating whether the match is good or not.
+    
+    Parameters:
+        taxid (int): The taxid for which to find the closest HMM parameters file.
+    
+    Returns:
+        tuple: A tuple containing two elements:
+            - str: The path to the closest HMM parameters file.
+            - bool: A boolean indicating whether the match is good or not.
+    
+    Raises:
+        None
+    
+    Examples:
+        >>> get_closest_hmm(123456)
+        ('/path/to/hmm_parameters/123456.params', True)
+    """
     if not taxid:
-        return 0, ""
+        return "", False
 
     taxids_file = get_tax_file("gnomon", "hmm_parameters/taxid.list")
 
@@ -551,21 +805,20 @@ def get_closest_hmm(taxid):
                 l = map(lambda x: int(x) if x[-1] != ';' else int(x[:-1]), parts[1].split())
                 lineages.append((int(t), list(l)+[int(t)]))
 
-    #if len(lineages) < len(taxids_list):
-    #    taxonomy_json_file = urlopen(dataset_taxonomy_url+','.join(taxids_list))
-    #    taxonomy = json.load(taxonomy_json_file)["taxonomy_nodes"]
-    #    lineages = [ (t["taxonomy"]["tax_id"], t["taxonomy"]["lineage"] + [t["taxonomy"]["tax_id"]]) for t in taxonomy ]
+    lineage, ranks = get_lineage(taxid)
 
-    lineage = get_lineage(taxid)
-
+    is_mammal = MAMMALS in lineage
     best_lineage = None
     best_taxid = None
     best_score = 0
+    best_good_match = False
     for (t, l) in lineages:
         pos1 = 0
         last_match = 0
+        last_good_match = False
         for pos in range(len(lineage)):
             tax_id = lineage[pos]
+            rank = ranks.get(tax_id, '')
             while tax_id != l[pos1]:
                 if pos1 + 1 < len(l):
                     pos1 += 1
@@ -573,26 +826,87 @@ def get_closest_hmm(taxid):
                     break
             if tax_id == l[pos1]:
                 last_match = pos1
+                last_good_match = last_good_match or rank == 'GENUS' or (rank == 'FAMILY' and is_mammal)
             else:
                 break
         if last_match > best_score:
             best_score = last_match
             best_taxid = t
             best_lineage = l
+            best_good_match = last_good_match
 
     if best_score == 0:
-        return 0, ""
+        return "", False
+
+    # Either perfect match or match of the genus or family for mammals
+    good_match = best_good_match or best_score == len(best_lineage) - 1
     # print(best_lineage)
     # print(best_taxid, best_score)
-    return best_taxid, get_file_path("gnomon", f"hmm_parameters/{best_taxid}.params")
+    return get_file_path("gnomon", f"hmm_parameters/{best_taxid}.params"), good_match
 
 
-PLANTS=33090
-VERTEBRATES=7742
+def get_closest_ortho_ref_taxid(taxid):
+    if not taxid:
+        return 0
+ 
+    taxids_file = get_tax_file("ortholog_references", "taxid.list")
+
+    taxids_list = []
+    lineages = []
+    for line in taxids_file:
+        parts = line.decode("utf-8").strip().split('\t')
+        if len(parts) > 0:
+            t = parts[0]
+            taxids_list.append(t)
+            if len(parts) > 1:
+                l = map(lambda x: int(x) if x[-1] != ';' else int(x[:-1]), parts[1].split())
+                lineages.append((int(t), list(l)+[int(t)]))
+
+    lineage, ranks = get_lineage(taxid)
+    
+    is_mammal = MAMMALS in lineage
+    best_lineage = None
+    best_taxid = None
+    best_score = 0
+    best_good_match = False
+    for (t, l) in lineages:
+        pos1 = 0
+        last_match = 0
+        last_good_match = False
+        for pos in range(len(lineage)):
+            tax_id = lineage[pos]
+            rank = ranks.get(tax_id, '')
+            while tax_id != l[pos1]:
+                if pos1 + 1 < len(l):
+                    pos1 += 1
+                else:
+                    break
+            if tax_id == l[pos1]:
+                last_match = pos1
+                last_good_match = last_good_match or rank == 'GENUS' or (rank == 'FAMILY' and is_mammal)
+            else:
+                break
+        if last_match > best_score:
+            best_score = last_match
+            best_taxid = t
+            best_lineage = l
+            best_good_match = last_good_match
+            
+
+    if best_score == 0:
+        return 0
+    
+    # Either perfect match or match of the genus or family for mammals
+    good_match = best_good_match or best_score == len(best_lineage) - 1
+    ##print(best_lineage)
+    ##print(best_taxid, best_score)
+    return best_taxid 
+
+
 def get_max_intron(taxid):
     if not taxid:
         return 0, 0
-    lineage = get_lineage(taxid)
+    lineage, _ = get_lineage(taxid)
     if PLANTS in lineage:
         return 300000, 3000000000
     elif VERTEBRATES in lineage:
@@ -644,7 +958,7 @@ def merge_params(task_params, run_inputs):
 
 
 def print_statistics(output):
-    accept_gff = Path(output) / 'accept.gff'
+    accept_gff = Path(output) / 'complete.genomic.gff'
     print(f"Statistics for {accept_gff}")
     counter = defaultdict(int)
     if accept_gff.exists():
@@ -663,13 +977,33 @@ def print_statistics(output):
         print(f"{k:12s} {counter[k]}")
 
 
+def get_software_version():
+    global software_version
+    if not software_version or software_version[0] == '$':
+        process_result = subprocess.run(["git", "describe", "--tags"], stdout=subprocess.PIPE)
+        if process_result.returncode == 0:
+            version = process_result.stdout.decode('utf-8').strip()
+        else:
+            version = "unknown"
+    else:
+        version = software_version
+    return version
+
+
+run_date = datetime.datetime.now().strftime("%Y_%m_%d")
+
 def main(argv):
     "Main script for EGAPx"
-    #warn user that this is an alpha release
-    print("\n!!WARNING!!\nThis is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use.\n")
 
     # Parse command line
     args = parse_args(argv)
+
+    if args.report_version:
+        print(f"EGAPx {get_software_version()}")
+        return 0
+
+    #warn user that this is an alpha release
+    print("\n!!WARNING!!\nThis is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use.\n")
 
     global user_cache_dir
     if args.local_cache:
@@ -708,16 +1042,50 @@ def main(argv):
     # Read default task parameters into a dict
     task_params = yaml.safe_load(open(Path(script_directory) / 'assets' / 'default_task_params.yaml', 'r'))
     run_inputs = repackage_inputs(yaml.safe_load(open(args.filename, 'r')))
-
+    
+    if int(args.ortho_taxid) > 0:
+        inputs = run_inputs['inputs']
+        inputs['ortho'] = {'taxid': int(args.ortho_taxid)}
+    
     if not expand_and_validate_params(run_inputs):
         return 1
+
+    # In GNOMON's chainer module, the default is -minlen 165 and -minscor 25.0,
+    # use -minlen 225 and -minscor 40.0 for Magnoliopsida and Vertebrates,
+    lineage, _ = get_lineage(run_inputs['input']['taxid'])
+    if MAGNOLIOPSIDA in lineage or VERTEBRATES in lineage:
+        minlen = 225
+        minscor = 40.0
+    else:
+        minlen = 165
+        minscor = 25.0
+    task_params = merge_params(task_params, {'tasks': { 'chainer': {'chainer_wnode': f"-minlen {minlen} -minscor {minscor}"}}})
+
+    # Add some parameters to specific tasks
+    inputs = run_inputs['input']
+    final_asn_params = f"-annot-software-version {get_software_version()}"
+    if 'annotation_provider' in inputs:
+        final_asn_params += f" -annot-provider \"{inputs['annotation_provider']}\""
+    if 'annotation_name_prefix' in inputs:
+        annotation_name_prefix = re.sub(r'\s+', '-', inputs['annotation_name_prefix'])
+        final_asn_params += f" -annot-name {annotation_name_prefix}-GB_{run_date}"
+    else:
+        final_asn_params += f" -annot-name GB_{run_date}"
+    if 'locus_tag_prefix' in inputs:
+        locus_tag_prefix = re.sub(r'\s+', '-', inputs['locus_tag_prefix'])
+        final_asn_params += f" -locus-tag-prefix {locus_tag_prefix}"
+    task_params = merge_params(task_params, {'tasks': { 'final_asn_markup': {'final_asn': final_asn_params}}} )
 
     # Command line overrides manifest input
     if args.output:
         run_inputs['output'] = args.output
 
     # Convert inputs to absolute paths
-    convert_paths(run_inputs)
+    try:
+        convert_paths(run_inputs)
+    except OSError as e:
+        print(F"{e.strerror}: {e.filename}")
+        return 1
 
     # Create output directory if needed
     os.makedirs(run_inputs['output'], exist_ok=True)
@@ -766,7 +1134,8 @@ def main(argv):
         nf_cmd += ["-with-report", f"{args.report}.report.html", "-with-timeline", f"{args.report}.timeline.html"]
     else:
         nf_cmd += ["-with-report", f"{output}/run.report.html", "-with-timeline", f"{output}/run.timeline.html"]
-    
+   
+    nf_cmd += ["-with-dag", 'dag.dot']
     nf_cmd += ["-with-trace", f"{output}/run.trace.txt"]
     # if output directory does not exist, it will be created
     if not os.path.exists(output):

@@ -79,36 +79,46 @@ process run_find_orthologs {
 
 
 
-ref_prot_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_protein.faa.gz'
-ref_genf_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_genomic.fna.gz'
-ref_geng_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_genomic.gff.gz' 
+//ref_prot_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_protein.faa.gz'
+//ref_genf_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_genomic.fna.gz'
+//ref_geng_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_genomic.gff.gz' 
+//ref_name_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/name_from_ortholog.rpt' 
 process fetch_ortholog_references  {
     input:
+        //path ortho_files      // map with file sources
+        path genomic_fna
+        path genomic_gff
+        path protein_faa
+        path name_from_rpt
     output:
-        path "output/p14_protein.faa", emit: "p14_protein_faa"
-        path "output/p14_genomic.fna", emit: "p14_genomic_fna"
-        path "output/gc1.annot.asnt.gz", emit: "annot_file"
+        path "output/ref_protein.faa", emit: "ref_protein_faa"
+        path "output/ref_genomic.fna", emit: "ref_genomic_fna"
+        path "output/ref_genomic.gff.asnt.gz", emit: "annot_file"
+        path "output/name_from_ortholog.rpt", emit: "name_from_ortholog"
     script:
     """
-        curl -O '$ref_prot_url'
-        curl -O '$ref_genf_url'
-        curl -O '$ref_geng_url'
-        gunzip GCF_000001405.40_GRCh38.p14_protein.faa.gz
-        gunzip GCF_000001405.40_GRCh38.p14_genomic.fna.gz
-        #gunzip GCF_000001405.40_GRCh38.p14_genomic.gff.gz
         mkdir -p output
-        zcat GCF_000001405.40_GRCh38.p14_genomic.gff.gz | multireader -format gff3 | gzip -c > output/gc1.annot.asnt.gz
-        mv GCF_000001405.40_GRCh38.p14_protein.faa output/p14_protein.faa
-        mv GCF_000001405.40_GRCh38.p14_genomic.fna output/p14_genomic.fna
-        #mv GCF_000001405.40_GRCh38.p14_genomic.gff output/p14_genomic.gff
         
+        cp ${genomic_fna} output/ref_genomic.fna.gz
+        cp ${protein_faa} output/ref_protein.faa.gz
+        cp ${name_from_rpt} output/name_from_ortholog.rpt
+
+        gunzip output/ref_genomic.fna.gz
+        gunzip output/ref_protein.faa.gz
+        zcat ${genomic_gff} | multireader -format gff3 | gzip -c > output/ref_genomic.gff.asnt.gz
     """   
     stub:
     """
         mkdir -p output
-        touch output/p14_protein.faa
-        touch output/p14_genomic.fna
-        touch output/gc1.annot.asnt.gz
+        touch output/ref_protein.faa
+        touch output/ref_genomic.fna
+        touch output/ref_genomic.gff.asnt.gz
+        touch output/name_from_ortholog.rpt
+        
+        ##cp ${genomic_fna} output/ref_genomic.fna
+        ##cp ${genomic_gff} output/ref_genomic.gff
+        ##cp ${protein_faa} output/ref_protein.faa
+        ##cp ${name_from_rpt} output/name_from_ortholog.rpt
     """
 }
 

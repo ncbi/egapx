@@ -14,7 +14,7 @@ workflow best_aligned_prot {
         parameters          // Map : extra parameter and parameter update
     main:
         default_params = ""
-        effective_params = merge_params(default_params, parameters, 'best_aligned_prot')
+        effective_params = merge_params(default_params, parameters, 'best_placement')
         run_best_aligned_prot(genome_asn_file, proteins_asn_file, alignment_asn_file, gencoll_file, effective_params)
 
     emit:

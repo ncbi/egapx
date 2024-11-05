@@ -31,7 +31,6 @@ workflow annot_builder {
         def i = annot_builder_input('outdir', m, '01', gnomon_file, params)
         // FIXME: intended params 4-5 to be lists of all input files and all input manifests, but it complained with only one entry
         def (all, accept, accept_ftable, annot) = annot_builder_run('outdir', i[0], gencoll_asn, i[1], gnomon_file, genome_asn, params)
-
     emit:
         outputs = all
         accept_asn = accept
@@ -158,9 +157,9 @@ process annot_builder_run {
         val params
     output:
         path "${outdir}/*", emit: "all"
-        path "${outdir}/ACCEPT/accept.asn", emit: "accept", optional: true
-        path "${outdir}/ACCEPT/accept.ftable_annot", emit: "accept_ftable_annot", optional: true
-        path "${outdir}/ACCEPT/*.annot", optional: true
+        path "${outdir}/ACCEPT/accept.asn", emit: "accept"//, optional: true
+        path "${outdir}/ACCEPT/accept.ftable_annot", emit: "accept_ftable_annot"//, optional: true
+        path "${outdir}/ACCEPT/*.annot"//, optional: true
     script:
     """
     mkdir -p $outdir/ACCEPT

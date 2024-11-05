@@ -35,7 +35,8 @@ process run_align_sort {
     mkdir -p LDS_Index
     lds2_indexer -source LDS_Index
     echo "${alignments.join('\n')}" > alignments.mft
-    align_sort  $parameters -input-manifest alignments.mft  -o output/sorted_aligns.asn  -lds2 LDS_Index/lds2.db
+    mkdir -p tmp
+    align_sort  $parameters -tmp tmp -input-manifest alignments.mft  -o output/sorted_aligns.asn  -lds2 LDS_Index/lds2.db
     """
     stub:
     """

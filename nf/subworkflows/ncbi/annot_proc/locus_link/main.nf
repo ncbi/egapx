@@ -21,7 +21,7 @@ workflow locus_link {
         parameters  // Map : extra parameter and parameter update
     main:
         default_params = ""
-        effective_params = merge_params(default_params, parameters, 'locus_link')
+        effective_params = merge_params(default_params, parameters, 'locus_type')
         run_locus_link(best_refseq_prot_hit, orthologs, annotation, 
                  gencoll_asn, gnomon_lds2_source, best_prot_hit, track_loci, comparisons,  curr_prev_compare,  
                  gnomon_biotypes, lxr_data, proteins_asn, name_from_ortholog,  default_params)
@@ -48,7 +48,7 @@ process run_locus_link {
         path comparisons
         path curr_prev_compare
         path gnomon_biotypes
-        path lxr_data
+        path lxr_data, stageAs: 'lxr_tracking_data.txt'
         path proteins_asn
         path name_from_ortholog
         val parameters
@@ -74,34 +74,12 @@ process run_locus_link {
     echo "${curr_prev_compare.join('\n')}" > curr_prev_compare.mft
     echo  "${comparisons.join('\n')}"  > comparisons.mft
     str=""
-    if [ ! -z "$orthologs" ]
-    then
-        str="\$str -orthologs $orthologs"
-    fi
-    if [ ! -z "$lxr_data" ]
-    then
-        str="\$str -lxr $lxr_data"
-    else
-        touch lxr_data
-        str="\$str -lxr lxr_data"
-    fi
+    str="\$str -orthologs $orthologs"
+    str="\$str -lxr $lxr_data"
+    str="\$str -locus_track $track_loci"
+    str="\$str -name_from_ortholog_rpt $name_from_ortholog"
 
-    if [ ! -z "$track_loci" ]
-    then
-        str="\$str -locus_track $track_loci"
-    else
-        touch track_loci
-        str="\$str -locus_track track_loci"
-    fi
-    if [ ! -z "$name_from_ortholog" ]
-    then
-        str="\$str -name_from_ortholog_rpt $name_from_ortholog"
-    else
-	    touch name_from_ortholog
-        str="\$str -name_from_ortholog_rpt name_from_ortholog"
-    fi
-
-    locus_type  -no_acc_reserve  -annots annotation.mft -gc $gencoll_asn -gnomon_biotype $gnomon_biotypes -o_stats output/stats.xml -o_locustypes output/locustypes.tsv -o_locus_lnk output/locus.lnk  -annotcmp comparisons.mft  -annotcmp_pb curr_prev_compare.mft \$str
+    locus_type  -asn-cache ./asncache/ -lds2 ./LDS2 -nogenbank -no_acc_reserve  -annots annotation.mft -gc $gencoll_asn -gnomon_biotype $gnomon_biotypes -o_stats output/stats.xml -o_locustypes output/locustypes.tsv -o_locus_lnk output/locus.lnk  -annotcmp comparisons.mft  -annotcmp_pb curr_prev_compare.mft \$str
     """
     stub:
     """

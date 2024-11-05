@@ -95,15 +95,7 @@ process annot {
     fi
 
     lds2=indexed_lds
-    if [ -n "$softmask_lds2" ]; then
-        # patch LDS2 to point to the source
-        files=\$(sqlite3 $softmask_lds2 -cmd "SELECT file_name FROM file" ".exit")
-        for f in \$files; do
-            base=\$(basename \$f)
-            sqlite3 $softmask_lds2 -cmd "UPDATE file SET file_name = '\$base' WHERE file_name = '\$f'" ".exit"
-        done
-        lds2+=",$softmask_lds2"
-    elif [ -n "$softmask" ]; then
+    if [ -n "$softmask" ]; then
         mkdir sm_src
         mv $softmask ./sm_src/
         lds2_indexer -source ./sm_src/ -db softmask_lds2

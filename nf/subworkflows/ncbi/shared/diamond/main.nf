@@ -27,22 +27,18 @@ nextflow.enable.dsl=2
 include {to_map; shellSplit } from '../../utilities'
 
 
-swiss_prot_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/reference_sets/swissprot.asnb.gz'
 process fetch_swiss_prot_asn  {
     input:
+        path swiss_prot_url
     output:
-        path "output/swissprot.asnb", emit: "swiss_prot_asn"
+        path "swissprot.asnb", emit: "swiss_prot_asn"
     script:
     """
-        curl -O '$swiss_prot_url'
-        gunzip swissprot.asnb.gz
-        mkdir -p output
-        mv swissprot.asnb output/swissprot.asnb
+        zcat ${swiss_prot_url} > swissprot.asnb
     """   
     stub:
     """
-        mkdir -p output
-        touch output/swissprot.asnb
+        touch swissprot.asnb
     """
 }
 
@@ -55,7 +51,7 @@ process get_swiss_prot_ids {
     """
         mkdir -p output
         lds2_indexer  -db lds -source  .
-        sqlite3 ./lds "SELECT txt_id FROM seq_id WHERE orig=1 AND int_id IS NULL;"    > output/swiss_prot_ids
+        sqlite3 ./lds "SELECT txt_id FROM seq_id WHERE orig=1 AND int_id IS NULL;" > output/swiss_prot_ids
     """
     stub:
     """

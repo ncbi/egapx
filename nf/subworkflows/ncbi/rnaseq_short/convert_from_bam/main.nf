@@ -38,7 +38,7 @@ process convert {
     if [ `stat -L -c%s $in_bam` -lt $min_file_size ] && [ `\$samtools view -c $in_bam` -eq 0 ]; then
         exit 0
     fi
-    tmpdir=`mktemp -d`
+    tmpdir=`mktemp -d --tmpdir=.`
     lds2_indexer -source genome/ -db LDS2
     # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
     sam2asn $conv_param -refs-local-by-default  -nogenbank -lds2 LDS2 -tmp-dir \$tmpdir -align-counts "${prefix}.align_counts.txt" -o "${prefix}.align.asnb.gz" -strandedness $strandedness -input $in_bam -samtools-path \$samtools

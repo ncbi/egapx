@@ -11,7 +11,7 @@ workflow extract_products_from_models {
         parameters          // Map : extra parameter and parameter update
     main:
         default_params = ""
-        effective_params = merge_params(default_params, parameters, 'extract_products_from_models')
+        effective_params = merge_params(default_params, parameters, 'extract_products')
         run_extract_products_from_models(models, effective_params)
 
     emit:
