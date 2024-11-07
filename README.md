@@ -2,7 +2,7 @@
 
 EGAPx is the publicly accessible version of the updated NCBI [Eukaryotic Genome Annotation Pipeline](https://www.ncbi.nlm.nih.gov/refseq/annotation_euk/process/). 
 
-EGAPx takes an assembly fasta file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. Functional annotation is added to the final structural annotation set based on the type and quality of the model and orthology information. The final annotation for the input assembly is produced as a `gff` file. 
+EGAPx takes an assembly FASTA file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. Functional annotation is added to the final structural annotation set based on the type and quality of the model and orthology information. The final annotation for the input assembly is produced as a `gff` file. 
 
 We currently have protein datasets posted that are suitable for most vertebrates, arthropods, and some plants:
   - Chordata - Mammalia, Sauropsida, Actinopterygii (ray-finned fishes), other Vertebrates
@@ -363,8 +363,9 @@ Description of the outputs:
 * `complete.transcripts.fna`: annotated transcripts in FASTA format (includes UTRs).
 * `complete.proteins.faa`: annotated protein products in FASTA format.
 * `annotated_genome.asn`: final annotation set in ASN1 format.
+
 Description of the logs and miscellaneous outputs:
-* `annot_builder_output/accept.ftable_annot`: intermediate file with accepted annotation models called by GNOMON.
+* `annot_builder_output/accept.ftable_annot`: intermediate file with accepted annotation models called by Gnomon.
 * `annotation_data.cmt`: annotation structured comment file. Used for submission to GenBank.
 * `nextflow.log`: main Nextflow log that captures all the process information and their work directories.
 * `resume.sh`: Nextflow command for resuming a run from the last successful task.
@@ -377,13 +378,13 @@ Description of the logs and miscellaneous outputs:
 
 ## Interpreting Output
 
-`stats/feature_counts.xml` contains summary counts of features by model prediction categories determined by GNOMON.
+`stats/feature_counts.xml` contains summary counts of features by model prediction categories determined by Gnomon.
 
 **NOTE** not all categories are expected to have counts data (e.g. model RefSeq, fully supported, ab initio)
 
 Genes with `major correction` are likely protein-coding genes with frameshifts and/or internal stops. These models include "LOW QUALITY PROTEIN" in the protein FASTA title, are marked up with exception=low-quality sequence region on the mRNA and CDS features, and the annotation is adjusted to meet GenBank criteria (frameshifts are compensated for by 1-2 bp microintrons in the mRNA and CDS features, and internal stops have a transl_except to translate the codon as X instead of a stop). For RefSeq, we set a threshold of no more than 10% of protein-coding genes with major corrections to release the annotation. We recommend users polish assembly sequences if the rate is higher than 10%.
 
-Counts of protein-coding genes should be considered versus similar species. Low counts may result from insufficient supporting evidence (e.g. low RNAseq coverage or an unusual organism compared to the available protein data). High counts may indicate genome fragmentation or noise from genes annotated on transposons.
+Counts of protein-coding genes should be considered versus similar species. Low counts may result from insufficient supporting evidence (e.g. low RNAseq coverage or an unusual organism compared to the available protein data). High counts may indicate genome fragmentation, uncollapsed haplotypic duplication, or noise from genes annotated on transposons.
 
 `stats/feature_stats.xml` contains summary statistics on transcript counts per gene, exon counts per transcript, and the counts and length distributions of features by sub-type.
 
