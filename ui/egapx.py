@@ -25,7 +25,7 @@ import stat
 
 import yaml
 
-software_version = "0.3.0-alpha"
+software_version = "0.3.1-alpha"
 
 VERBOSITY_DEFAULT=0
 VERBOSITY_QUIET=-1
@@ -496,7 +496,7 @@ def expand_and_validate_params(run_inputs):
     else:
         # Given max_intron is a hard limit, no further calculation is necessary
         inputs['genome_size_threshold'] = 0
-    
+
     if 'ortho' not in inputs or inputs['ortho'] is None or len(inputs['ortho']) < 4:
         ortho_files = dict()
         if 'ortho' in inputs and isinstance(inputs['ortho'], dict):
@@ -508,24 +508,14 @@ def expand_and_validate_params(run_inputs):
         if chosen_taxid == 0: 
             chosen_taxid = get_closest_ortho_ref_taxid(taxid)
         ortho_files['taxid'] = chosen_taxid
-        
+
         file_id = ['genomic.fna', 'genomic.gff', 'protein.faa']
-        
-        possible_files = []
-        try:
-            possible_files = get_files_under_path('ortholog_references', f'{chosen_taxid}/current')
-        except: 
-            print(f'Could not find path for ortho taxid {chosen_taxid}')
-            return False
-        for pf in possible_files:
-            for fi in file_id:
-                if fi in ortho_files:
-                    continue
-                if pf.find(fi) > -1:
-                    ortho_files[fi] = pf
-        
+        for fi in file_id:
+            ortho_files[fi] = get_file_path('ortholog_references', f'{chosen_taxid}/current/{fi}.gz')
+
         ortho_files['name_from.rpt'] = get_file_path('ortholog_references',f'{chosen_taxid}/name_from_ortholog.rpt')
         inputs['ortho'] = ortho_files
+
     if 'reference_sets' not in inputs or inputs['reference_sets'] is None:
         inputs['reference_sets'] = get_file_path('reference_sets', 'swissprot.asnb.gz')
 
@@ -613,31 +603,6 @@ def get_file_path(subsystem, filename):
         return file_path
     return file_url
 
-def get_files_under_path(subsystem, part_path):
-    cache_dir = get_cache_dir()
-    vfn = get_versioned_path(subsystem, part_path)
-    file_path = os.path.join(cache_dir, vfn)
-    file_url = f"{FTP_EGAP_ROOT}/{vfn}"
-    ## look under file_path
-    files_below = list()
-    try:
-        for i in Path(file_path).iterdir():
-            files_below.append(str(i))
-        if files_below:
-            return files_below
-    except:
-        None
-    ## if nothing, look under file_url
-    if not files_below:
-        ftpd = FtpDownloader()
-        ftpd.connect(FTP_EGAP_SERVER)
-        ftp_dir = f'{FTP_EGAP_ROOT_PATH}/{vfn}'
-        files_found = ftpd.list_ftp_dir(ftp_dir)
-        files_online = list()
-        for i in files_found:
-            files_online.append(  f"{FTP_EGAP_ROOT}/{vfn}/{i}")  ### .replace('//','/') ) 
-        return files_online
-    return list()
 
 def get_config(script_directory, args):
     config_file = ""
@@ -1059,7 +1024,7 @@ def main(argv):
     else:
         minlen = 165
         minscor = 25.0
-    task_params = merge_params(task_params, {'tasks': { 'chainer': {'chainer_wnode': f"-minlen {minlen} -minscor {minscor}"}}})
+    task_params = merge_params(task_params, {'tasks': { 'chainer_wnode': {'chainer_wnode': f"-minlen {minlen} -minscor {minscor}"}}})
 
     # Add some parameters to specific tasks
     inputs = run_inputs['input']
