@@ -42,8 +42,7 @@ workflow gnomon_plane {
             effective_hmm = hmm_params
         } else {
             effective_hmm = gnomon_training_iterations(hmm_params, genome_asn, proteins_asn, alignments, /* evidence_denylist */ [], /* gap_fill_allowlist */ [],
-                [proteins_trusted].flatten(), scaffolds, softmask,
-                softmask, scaffolds,
+                [proteins_trusted].flatten(), scaffolds, softmask, scaffolds,
                 max_intron,
                 task_params)
         }

@@ -420,7 +420,7 @@ If you do not have internet access from your cluster, you can run EGAPx in offli
 ```
 rm egap*sif
 singularity cache clean
-singularity pull docker://ncbi/egapx:0.3.0-alpha
+singularity pull docker://ncbi/egapx:0.3.1-alpha
 ```
 
 - Clone the repo:

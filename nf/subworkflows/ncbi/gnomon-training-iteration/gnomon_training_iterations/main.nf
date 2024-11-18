@@ -17,24 +17,23 @@ workflow gnomon_training_iterations {
         chainer_gap_fill_allowlist
         chainer_trusted_genes
         chainer_scaffolds
-        gnomon_softmask_lds2
-        gnomon_softmask_lds2_source
+        gnomon_softmask
         gnomon_scaffolds
         max_intron
         parameters
     main:
     gnomon_training_iteration(models_file, genome_asn, proteins_asn ,chainer_alignments,chainer_evidence_denylist,chainer_gap_fill_allowlist,
-               chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
+               chainer_trusted_genes, chainer_scaffolds, 
+               gnomon_softmask, gnomon_scaffolds, max_intron, parameters)
     gnomon_training_iteration2(gnomon_training_iteration.out.hmm_params_file, genome_asn, proteins_asn ,chainer_alignments,
-               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
+               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, 
+               gnomon_softmask, gnomon_scaffolds, max_intron, parameters)
     gnomon_training_iteration3(gnomon_training_iteration2.out.hmm_params_file, genome_asn, proteins_asn ,chainer_alignments,
-               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
+               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, 
+               gnomon_softmask, gnomon_scaffolds, max_intron, parameters)
     gnomon_training_iteration4(gnomon_training_iteration3.out.hmm_params_file, genome_asn, proteins_asn ,chainer_alignments,
-               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, gnomon_softmask_lds2,
-               gnomon_softmask_lds2_source, gnomon_scaffolds, max_intron, parameters)
+               chainer_evidence_denylist,chainer_gap_fill_allowlist, chainer_trusted_genes, chainer_scaffolds, 
+               gnomon_softmask, gnomon_scaffolds, max_intron, parameters)
 
     emit:
         hmm_params_file = gnomon_training_iteration4.out.hmm_params_file

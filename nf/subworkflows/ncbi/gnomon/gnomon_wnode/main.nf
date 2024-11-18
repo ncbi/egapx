@@ -18,7 +18,7 @@ workflow gnomon_wnode {
     main:
         String gpx_qsubmit_params =  merge_params("", parameters, 'gpx_qsubmit')
         String annot_params =  merge_params("-margin 1000 -mincont 1000 -minlen 225 -mpp 10.0 -ncsp 25 -window 200000 -nonconsens -open", parameters, 'annot_wnode')
-        String gpx_qdump_params =  merge_params("-slices-for affinity -sort-by affinity", parameters, 'gpx_qdump')
+        String gpx_qdump_params =  merge_params("-unzip '*' -slices-for affinity -sort-by affinity", parameters, 'gpx_qdump')
 
         def (jobs, lines_per_file) = gpx_qsubmit(scaffolds, chains, chains_slices, gpx_qsubmit_params)
         def annot_files = annot(jobs.flatten(), chains, hmm_params, softmask_lds2, softmask_lds2_source, genome, proteins, lines_per_file, annot_params)
@@ -140,7 +140,7 @@ process gpx_qdump {
         path "*.out", emit: "outputs"
     script:
     """
-    gpx_qdump $params -input-path inputs -output gnomon_wnode.out
+    gpx_qdump $params  -input-path inputs -output gnomon_wnode.out
     """
     stub:
     """
