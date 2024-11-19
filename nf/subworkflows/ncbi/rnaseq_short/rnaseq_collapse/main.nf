@@ -98,9 +98,9 @@ process run_rnaseq_collapse {
     # with the same filename. We need to avoid that to be able to stage
     # the output files for gpx_make_outputs. We add the job file numeric
     # extension as a prefix to the filename.
-    mkdir interim
+    mkdir -p interim
     rnaseq_collapse $params -O interim -nogenbank -lds2 ./genome_lds -sorted-vols align.mft -scaffold-list scaffold_list.mft -sra-metadata-manifest metadata.mft -start-job-id \$start_job_id -input-jobs $job -workers \$threads
-    mkdir output
+    mkdir -p output
     for f in interim/*; do
         if [ -f \$f ]; then
             mv \$f output/\${extension}_\$(basename \$f)

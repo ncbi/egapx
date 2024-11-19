@@ -48,7 +48,7 @@ process run_fetch_sra_fasta {
     curl -o ${sra} \$output_${sra}
     fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\\\$ac.\\\$si.\\\$ri" --fasta -O .  ./${sra}
     rm -f ${sra}
-    mkdir output
+    mkdir -p output
     mv ${sra}_1.fasta output/${sra}.1
     if [ -f ${sra}_2.fasta ]; then
         mv ${sra}_2.fasta output/${sra}.2

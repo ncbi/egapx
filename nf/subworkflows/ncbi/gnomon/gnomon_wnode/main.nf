@@ -96,7 +96,7 @@ process annot {
 
     lds2=indexed_lds
     if [ -n "$softmask" ]; then
-        mkdir sm_src
+        mkdir -p sm_src
         mv $softmask ./sm_src/
         lds2_indexer -source ./sm_src/ -db softmask_lds2
         lds2+=",softmask_lds2"
@@ -114,9 +114,9 @@ process annot {
     # with the same filename. We need to avoid that to be able to stage
     # the output files for gpx_make_outputs. We add the job file numeric
     # extension as a prefix to the filename.
-    mkdir interim
+    mkdir -p interim
     annot_wnode $params -nogenbank -lds2 \$lds2  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -param $hmm_params -O interim || true
-    mkdir output
+    mkdir -p output
     for f in interim/*; do
         if [ -f \$f ]; then
             mv \$f output/\${extension}_\$(basename \$f)
