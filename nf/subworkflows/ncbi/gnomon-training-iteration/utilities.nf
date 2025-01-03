@@ -25,7 +25,7 @@ workflow gnomon_training_iteration {
 
         chainer(chainer_alignments, initial_hmm_params, chainer_evidence_denylist, chainer_gap_fill_allowlist, chainer_scaffolds, chainer_trusted_genes, genome_asn, proteins_asn, parameters.get('chainer_wnode', [:]))
         gnomon_wnode(gnomon_scaffolds, chainer.out.chains, chainer.out.chains_slices, initial_hmm_params, gnomon_softmask, [], genome_asn, proteins_asn,  parameters.get('gnomon_wnode', [:]))
-        gnomon_training(genome_asn, gnomon_wnode.out.outputs, max_intron, parameters.get('gnomon_training', [:]))
+        gnomon_training(genome_asn, gnomon_wnode.out.gn_models, max_intron, parameters.get('gnomon_training', [:]))
 
     emit:
         hmm_params_file = gnomon_training.out.hmm_params_file

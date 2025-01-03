@@ -34,58 +34,45 @@ process run_converter {
         path 'output/*.cds.fna', emit: 'cds_fasta'
         path 'output/*.proteins.faa', emit: 'proteins_fasta'
     script:
-        //def basename = asn_file.baseName.toString()
-        def basename = asn_files.first().baseName.toString()
     """
-    echo "${asn_files.join('\n')}" > ${basename}.mft
     mkdir -p output
-    ##if [ -s ${asn_files} ]; then
-        mkdir -p tmpout
-        for af in ${asn_files}
-        do
-          afb=\$(basename \$af)
-          annotwriter ${gff_params} -nogenbank -i \${af} -format gff3 -o tmpout/\${afb}.genomic.gff
-          annotwriter ${gtf_params} -nogenbank -i \${af} -format gtf -o tmpout/\${afb}.genomic.gtf
-          asn2fasta -nogenbank -i \${af} -nucs-only |sed -e 's/^>lcl|\\(.*\\)/>\\1/' > tmpout/\${afb}.genomic.fna
-          asn2fasta -nogenbank -i \${af} -feats rna_fasta -o tmpout/\${afb}.transcripts.fna
-          asn2fasta -nogenbank -i \${af} -feats fasta_cds_na -o tmpout/\${afb}.cds.fna
-          asn2fasta -nogenbank -i \${af} -prots-only -o tmpout/\${afb}.proteins.faa
-        done
-        cat tmpout/*.gff > output/complete.genomic.gff
-        cat tmpout/*.gtf > output/complete.genomic.gtf
-        cat tmpout/*.genomic.fna > output/complete.genomic.fna
-        cat tmpout/*.transcripts.fna > output/complete.transcripts.fna
-        cat tmpout/*.cds.fna > output/complete.cds.fna
-        cat tmpout/*.proteins.faa > output/complete.proteins.faa
-        rm tmpout/*
-      
-        ##annotwriter ${gff_params} -nogenbank -i ${asn_files} -format gff3 -o output/${basename}.genomic.gff
-        ##annotwriter ${gtf_params} -nogenbank -i ${asn_files} -format gtf -o output/${basename}.genomic.gtf
-        ##asn2fasta -nogenbank -nucs-only -indir asn_inputs  -o - |sed -e 's/^>lcl|\\(.*\\)/>\\1/' >output/${basename}.genomic.fna
-        ##asn2fasta -nogenbank -feats rna_fasta        -indir asn_inputs -o output/${basename}.transcripts.fna
-        ##asn2fasta -nogenbank -feats fasta_cds_na -i  -indir asn_inputs -o output/${basename}.cds.fna
-        ##asn2fasta -nogenbank -prots-only -i -indir asn_inputs -o output/${basename}.proteins.faa
-    ##else
-    ##    touch output/${basename}.genomic.gff
-    ##    touch output/${basename}.genomic.gtf
-    ##    touch output/${basename}.genomic.fna
-    ##    touch output/${basename}.transcripts.fna
-    ##    touch output/${basename}.cds.fna
-    ##    touch output/${basename}.proteins.faa
-    ##fi
+    mkdir -p tmpout
+    found_afbs=(0)
+    for af in asn_inputs/*
+    do
+        afb=\$(basename \$af)
+        found_afbs+=(\${afb})
+        annotwriter ${gff_params} -nogenbank -i \${af} -format gff3 -o tmpout/\${afb}.genomic.gff
+        annotwriter ${gtf_params} -nogenbank -i \${af} -format gtf -o tmpout/\${afb}.genomic.gtf
+        asn2fasta -nogenbank -i \${af} -nucs-only |sed -e 's/^>lcl|\\(.*\\)/>\\1/' > tmpout/\${afb}.genomic.fna
+        asn2fasta -nogenbank -i \${af} -feats rna_fasta -o tmpout/\${afb}.transcripts.fna
+        asn2fasta -nogenbank -i \${af} -feats fasta_cds_na -o tmpout/\${afb}.cds.fna
+        asn2fasta -nogenbank -i \${af} -prots-only -o tmpout/\${afb}.proteins.faa
+    done
+    ##echo 'D: ' \${found_afbs[@]}
+    cat `find tmpout -name g*.gff -o -name all_unannot*.genomic.gff` > output/complete.genomic.gff
+    cat `find tmpout -name g*.gtf -o -name all_unannot*.genomic.gtf` > output/complete.genomic.gtf
+    cat `find tmpout -name g*.genomic.fna -o -name all_unannot*.genomic.fna` > output/complete.genomic.fna
+    cat `find tmpout -name g*.transcripts.fna -o -name all_unannot*.transcripts.fna` > output/complete.transcripts.fna
+    cat `find tmpout -name g*.cds.fna -o -name all_unannot*.cds.fna` > output/complete.cds.fna
+    cat `find tmpout -name g*.proteins.faa -o -name all_unannot*.proteins.faa` > output/complete.proteins.faa
+    rm tmpout/*
+    touch output/complete.genomic.gff
+    touch output/complete.genomic.gtf
+    touch output/complete.genomic.fna
+    touch output/complete.transcripts.fna
+    touch output/complete.cds.fna
+    touch output/complete.proteins.faa
     """
 
     stub:
-        def basename = asn_files.first().baseName.toString()
-        print(asn_files)
-        print(basename)
     """
     mkdir -p output
-    echo "Genomic GFF"    > output/${basename}.genomic.gff
-    echo "Genomic GTF"    > output/${basename}.genomic.gtf
-    echo "Genomic FASTA"  > output/${basename}.genomic.fna
-    echo "Transcript FASTA" > output/${basename}.transcripts.fna
-    echo "CDS FASTA" > output/${basename}.cds.fna
-    echo "Protein FASTA"   > output/${basename}.proteins.faa
+    echo "Genomic GFF"      > output/complete.genomic.gff
+    echo "Genomic GTF"      > output/complete.genomic.gtf
+    echo "Genomic FASTA"    > output/complete.genomic.fna
+    echo "Transcript FASTA" > output/complete.transcripts.fna
+    echo "CDS FASTA"        > output/complete.cds.fna
+    echo "Protein FASTA"    > output/complete.proteins.faa
     """
 }

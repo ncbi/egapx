@@ -83,8 +83,8 @@ process run_diamond_egap {
     prime_cache -cache ./asncache/ -ifmt asnb-seq-entry  -i ${gnomon_prot_asn} -oseq-ids /dev/null -split-sequences
     prime_cache -cache ./asncache/ -ifmt asnb-seq-entry  -i ${swiss_prot_asn} -oseq-ids /dev/null -split-sequences
 
-    mkdir ./output
-    mkdir ./work
+    mkdir -p ./output
+    mkdir -p ./work
 
     echo  ${params}
     echo "${gnomon_prot_ids.join('\n')}" > query.mft

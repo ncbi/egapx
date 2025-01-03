@@ -15,10 +15,11 @@ We currently have protein datasets posted that are suitable for most vertebrates
 
 Fungi, protists and nematodes are currently out-of-scope for EGAPx pending additional refinements.
 
-
+**Submitting to GenBank:**
+If you’d like to be an early tester as we refine the output and workflow for submitting EGAPx annotation to GenBank, please contact us at cgr@nlm.nih.gov.
 
 **Warning:**
-The current version is an alpha release with limited features and organism scope to collect initial feedback on execution. Outputs are not yet complete and not intended for production use. Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues)  if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.  
+The current version is an early release and still under active development to add features and refine outputs. The workflow for GenBank submission is still under development. Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues) if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.  
 
 
 **Security Notice:**
@@ -59,7 +60,9 @@ Input to EGAPx is in the form of a YAML file.
   taxid: NCBI Taxonomy identifier of the target organism 
   reads: RNA-seq data
   ```
-  You can obtain taxid from the [NCBI Taxonomy page](https://www.ncbi.nlm.nih.gov/taxonomy).
+  - The assembled genome should be screened for contamination prior to running EGAPx. See the NCBI [Foreign Contamination Screen](https://github.com/ncbi/fcs) for a fast, user-friendly contamination screening tool. 
+
+  - You can obtain taxid from the [NCBI Taxonomy page](https://www.ncbi.nlm.nih.gov/taxonomy).
 
 
   - RNA-seq data can be supplied in any one of the following ways:
@@ -71,9 +74,9 @@ Input to EGAPx is in the form of a YAML file.
     reads: SRA query for reads
     ```
 
-- The following are the _optional_ key-value pairs for the input file:  
+- The following are the _optional_ key-value pairs for the input file. The default taxid-based settings (i.e. omitting these parameters) are recommended for most use cases:  
 
-  - A protein set. A taxid-based protein set will be chosen if no protein set is provided.
+  - A protein set. A taxid-based protein set will be chosen if no protein set is provided. This should only be needed for annotation of obscure organisms or those with little RNAseq data available.
     ```
     proteins: path to proteins data in FASTA format. 
     ```
@@ -420,7 +423,7 @@ If you do not have internet access from your cluster, you can run EGAPx in offli
 ```
 rm egap*sif
 singularity cache clean
-singularity pull docker://ncbi/egapx:0.3.1-alpha
+singularity pull docker://ncbi/egapx:0.3-alpha
 ```
 
 - Clone the repo:

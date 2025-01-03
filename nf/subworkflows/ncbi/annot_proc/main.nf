@@ -59,6 +59,7 @@ workflow annot_proc_plane {
         symbol_format_class // string for how to format gene names 
         ortho_files      /// ortho reference input files
         reference_sets  // reference sets, for now only swissprot
+        prot_denylist
         task_params     // task parameters for every task
     main:
         // Post GNOMON
@@ -70,7 +71,7 @@ workflow annot_proc_plane {
         // Seed Protein-Model Hits
         diamond_worker(prot_gnomon_prepare.out.prot_ids, swiss_prot_ids, gnomon_models, swiss_prot_asn, task_params.get('diamond_identify', [:]))
         best_protein_hits(gnomon_models, swiss_prot_asn,  diamond_worker.out.alignments , task_params.get('best_protein_hits', [:]))
-        gnomon_biotype(gnomon_models,/*splices_file  -- constant*/ [],  /*denylist -- constant*/ [], gencoll_asn, swiss_prot_asn, [], diamond_worker.out.alignments,task_params.get('gnomon_biotype', [:]))
+        gnomon_biotype(gnomon_models,/*splices_file  -- constant*/ [], prot_denylist, gencoll_asn, swiss_prot_asn, [], diamond_worker.out.alignments,task_params.get('gnomon_biotype', [:]))
        
         annot_builder(gencoll_asn, gnomon_models, genome_asn, task_params.get('annot_builder', [:]))
         def accept_ftable_file = annot_builder.out.accept_ftable_annot
