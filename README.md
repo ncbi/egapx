@@ -423,7 +423,7 @@ If you do not have internet access from your cluster, you can run EGAPx in offli
 ```
 rm egap*sif
 singularity cache clean
-singularity pull docker://ncbi/egapx:0.3-alpha
+singularity pull docker://ncbi/egapx:0.3.2-alpha
 ```
 
 - Clone the repo:
@@ -455,7 +455,7 @@ Now edit the file paths of SRA reads files in `examples/input_D_farinae_small.ya
 - Run `egapx.py` first to edit the `biowulf_cluster.config`:
 ```
 ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
-echo "process.container = '/path_to_/egapx_0.3-alpha.sif'" >> egapx_config/biowulf_cluster.config
+echo "process.container = '/path_to_/egapx_0.3.2-alpha.sif'" >> egapx_config/biowulf_cluster.config
 ```
 
 - Run `egapx.py`:
