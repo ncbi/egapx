@@ -59,6 +59,7 @@ workflow {
     def rnaseq_alignments = input_params.get('rnaseq_alignments', []) ?: []
     def protein_alignments = input_params.get('protein_alignments', []) ?: []
     def reference_sets = input_params.get('reference_sets', []) ?: []
+    def prot_denylist = input_params.get('prot_denylist', []) ?: []
     def task_params = params.get('tasks', [:])
     if (params.verbose) {
         println("input params:\ngenome ${genome}")
@@ -80,13 +81,12 @@ workflow {
         println("rnaseq_alignments ${rnaseq_alignments}")
         println("protein_alignments ${protein_alignments}")
         println("reference_sets ${reference_sets}")
+        println("prot_denylist ${prot_denylist}")
         // Keep it last as it is large
         println("task_params ${task_params}")
     }
     
-    egapx(genome, proteins, proteins_trusted, reads_query, reads_ids, reads, reads_metadata, organelles, tax_id, symbol_format_class, hmm_params, train_hmm, softmask, max_intron, genome_size_threshold, ortho_files, reference_sets, task_params)
-    // export(egapx.out.out_files, egapx.out.annot_builder_output, egapx.out.locus)
-    //export(egapx.out.out_files, egapx.out.annot_builder_output)
+    egapx(genome, proteins, proteins_trusted, reads_query, reads_ids, reads, reads_metadata, organelles, tax_id, symbol_format_class, hmm_params, train_hmm, softmask, max_intron, genome_size_threshold, ortho_files, reference_sets, prot_denylist, task_params)
     export(egapx.out.out_ggff, 
            egapx.out.out_ggtf,
            egapx.out.out_gfa,

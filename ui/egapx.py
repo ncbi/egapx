@@ -14,7 +14,6 @@ import time
 import datetime
 from collections import defaultdict
 from ftplib import FTP
-from ftplib import FTP_TLS
 import ftplib
 from pathlib import Path
 from typing import List
@@ -22,20 +21,36 @@ from urllib.request import urlopen
 import json
 import sqlite3
 import stat
+import glob
 
 import yaml
 
-software_version = "0.3.1-alpha"
+software_version = "0.3.2-alpha"
 
 VERBOSITY_DEFAULT=0
 VERBOSITY_QUIET=-1
 VERBOSITY_VERBOSE=1
 
-# Clades with exceptional treatment
-PLANTS=33090
-VERTEBRATES=7742
-MAMMALS=40674
-MAGNOLIOPSIDA=3398
+# Clades with special treatment
+MAGNOLIOPSIDA = 3398
+ACTINOPTERYGII = 7898
+COELACANTHIMORPHA = 118072
+CHONDRICHTHYES = 7777
+DIPNOMORPHA = 7878
+FISH = {ACTINOPTERYGII, COELACANTHIMORPHA, CHONDRICHTHYES, DIPNOMORPHA}
+PRIMATE = 9443
+MAMMAL = 40674
+RODENT = 9989
+VERTEBRATE = 7742
+MAGNOLIOPSIDA = 3398
+ANIMALS = 33208   
+## define gbdiv_inv as has ANIMALS but not VERTEBRATE
+INSECTA = 50557
+ARTHROPOD = 6656
+VIRIDIPLANTAE = 33090
+LEPIDOSAURS = 8504 
+AMPHIBIANS = 8292 
+
 
 FTP_EGAP_PROTOCOL = "https"
 FTP_EGAP_SERVER = "ftp.ncbi.nlm.nih.gov"
@@ -58,6 +73,7 @@ def parse_args(argv):
     parser.add_argument("-n", "--dry-run", action="store_true", default=False)
     parser.add_argument("-st", "--stub-run", action="store_true", default=False)
     parser.add_argument("-so", "--summary-only", help="Print result statistics only if available, do not compute result", action="store_true", default=False)
+    parser.add_argument("-lo", "--logs-only", help="Collect execution logs if available, put them in output directory, do not compute result", action="store_true", default=False)
     parser.add_argument("-ot", "--ortho-taxid", default=0, help="Taxid of reference data for orthology tasks")
     group = parser.add_argument_group('download')
     group.add_argument("-dl", "--download-only", help="Download external files to local storage, so that future runs can be isolated", action="store_true", default=False)
@@ -244,7 +260,7 @@ def convert_value(value, key, strict):
 
 path_inputs = {'genome', 'hmm', 'softmask', 'reads_metadata', 'organelles',
                'proteins', 'proteins_trusted', 'reads',
-               'rnaseq_alignments', 'protein_alignments', 'ortho', 'reference_sets' }
+               'rnaseq_alignments', 'protein_alignments', 'ortho', 'reference_sets', 'prot_denylist'}
 def convert_paths(run_inputs):
     "Convert paths to absolute paths where appropriate"
     input_root = run_inputs['input']
@@ -345,43 +361,6 @@ def prepare_reads(run_inputs):
 
 
 
-'''
-from /src/internal/gpipe/app/locusXref/populate_tax_tables.cpp
-
-278         bool fish_lineage = lineage.find("Actinopterygii") != string::npos ||
-279                             lineage.find("Coelacanthimorpha") != string::npos ||
-280                             lineage.find("Chondrichthyes") != string::npos ||
-281                             lineage.find("Dipnoi") != string::npos;
-282         int pub_stat = 4, use_in_lxr_client = 1, pref_map_link_type = 448;
-283         int tax_id_name_auth = 0;
-284         if(gbdiv == "gbdiv_vrt" && fish_lineage) {
-285             tax_id_name_auth = 7955;
-286         } else if(gbdiv == "gbdiv_pri" || gbdiv == "gbdiv_mam"
-287             || gbdiv == "gbdiv_vrt" || gbdiv == "gbdiv_rod") {
-288             tax_id_name_auth = 9606;
-289         } else if(gbdiv == "gbdiv_pln") {
-290             tax_id_name_auth = 3702;
-291         } else if(gbdiv == "gbdiv_inv" &&
-292                  (lineage.find("Insecta") != string::npos ||
-293                   lineage.find("Arthropoda") != string::npos))
-294         {
-295             tax_id_name_auth = 7227;
-296         }
-297         string symbol_format_class = "allupper";
-298         string symbol_format = "[A-Z][A-Z0-9][-A-Z0-9]%";
-299         if(tax_id_name_auth == 7227) {
-300             symbol_format_class = "NULL";
-301             symbol_format = "NULL";
-302         } else if(gbdiv == "gbdiv_rod" || gbdiv == "gbdiv_inv") {
-303             symbol_format_class = "uplow";
-304             symbol_format = "[A-Z][a-z0-9][-a-z0-9]%";
-305         }
-306         if(fish_lineage) {
-307             //if looks like a fish
-308             symbol_format_class = "alllow";
-309             symbol_format = "[a-z][a-z0-9][-a-z0-9]%";
-310         }
-'''
 def get_symbol_format_class_for_taxid(taxid):
     #print('e:get_symbol_format_class_for_taxid')
     #print(f'taxid: {taxid}')
@@ -390,24 +369,6 @@ def get_symbol_format_class_for_taxid(taxid):
     #print(f'ranks: {ranks}')
 
     format_class = ''
-
-    ACTINOPTERYGII = 7898
-    COELACANTHIMORPHA = 118072
-    CHONDRICHTHYES = 7777
-    DIPNOMORPHA = 7878
-    FISH = [ACTINOPTERYGII,COELACANTHIMORPHA,CHONDRICHTHYES,DIPNOMORPHA]
-    PRIMATE = 9443
-    MAMMAL = 40674
-    RODENT = 9989
-    VERTEBRATE = 7742
-    ANIMALS = 33208   
-    ## define gbdiv_inv as has ANIMALS but not VERTEBRATE
-    INSECTA = 50557
-    ARTHROPOD = 6656
-    VIRIDIPLANTAE = 33090
-    LEPIDOSAURS = 8504 
-    AMPHIBIANS = 8292 
-
 
     #test_taxids = [7898, 9989, 7742, 6656, 33090]
     #for tt in test_taxids:
@@ -451,6 +412,11 @@ def expand_and_validate_params(run_inputs):
         return False
 
     taxid = inputs['taxid']
+    
+    supported, msg = check_supported_taxid(taxid)
+    if not supported: 
+        print(msg)
+        return False
 
     if 'symbol_format_class' not in inputs:
         symbol_format_class = get_symbol_format_class_for_taxid(taxid)
@@ -459,7 +425,8 @@ def expand_and_validate_params(run_inputs):
     if 'genome' not in inputs:
         print("ERROR: Missing parameter: 'genome'")
         return False
-
+    
+      
     # Check for proteins input and if empty or no input at all, add closest protein bag
     if 'proteins' not in inputs:
         proteins,trusted = get_closest_protein_bag(taxid)
@@ -481,13 +448,13 @@ def expand_and_validate_params(run_inputs):
             print("ERROR: Either proteins or RNA-seq reads should be provided for annotation")
             return False
 
+    train_hmm = False
     if 'hmm' not in inputs:
         best_hmm, good_match = get_closest_hmm(taxid)
         inputs['hmm'] = best_hmm
-        inputs['train_hmm'] = not good_match
-    else:
-        # We assume the user knows what they're doing and the training is not necessary
-        inputs['train_hmm'] = False
+        train_hmm = not good_match
+    if 'train_hmm' not in inputs:
+        inputs['train_hmm'] = train_hmm
 
     if 'max_intron' not in inputs:
         max_intron, genome_size_threshold = get_max_intron(taxid)
@@ -518,25 +485,30 @@ def expand_and_validate_params(run_inputs):
 
     if 'reference_sets' not in inputs or inputs['reference_sets'] is None:
         inputs['reference_sets'] = get_file_path('reference_sets', 'swissprot.asnb.gz')
+        inputs['prot_denylist'] = get_file_path('reference_sets', 'swissprot_organelle_bacteria.gi')
 
     return True
 
 
-def manage_workdir(args):
+def get_workdir(args):
+    workdir = ''
     workdir_file = f"work_dir_{args.executor}.last"
     if args.workdir:
-        os.environ['NXF_WORK'] = args.workdir
+        workdir = args.workdir
         with open(workdir_file, 'w') as f:
             f.write(args.workdir)
     else:
         if os.path.exists(workdir_file):
             with open(workdir_file) as f:
-                os.environ['NXF_WORK'] = f.read().strip()
+                workdir = f.read().strip()
         else:
-            if args.executor == 'aws':
+            # For cloud-based execution the workdir should be set
+            if args.executor in {'aws', 'gcp', 'azure'}:
                 print("Work directory not set, use -w at least once")
-                return False
-    return True
+                return ''
+            else:
+                workdir = 'work'
+    return workdir
 
 
 def get_cache_dir():
@@ -644,6 +616,8 @@ def get_config(script_directory, args):
     return ",".join(config_files)
 
 
+    
+
 lineage_cache = {}
 def get_lineage(taxid):
     global lineage_cache
@@ -698,6 +672,21 @@ def get_tax_file(subsystem, tax_path):
     else:
         taxids_file = urlopen(taxids_url)
     return taxids_file
+
+
+def check_supported_taxid(taxid):
+    if not taxid:
+        return False, "No taxid provided"
+
+    (lineage, ranks) = get_lineage(taxid)
+    reqs = [ARTHROPOD, VERTEBRATE, MAGNOLIOPSIDA]
+    lineage_check = any(l in lineage for l in reqs)
+
+    #print(f'input tax: {taxid} , lineage: {lineage} , contains: { lineage_check } ')
+    if lineage_check:
+        return True, ''
+    return False, "ERROR: Input taxid not within supported range. Must be under Arthropoda(6656), Vertebrata(7742), or Magnoliopsida(3398) according to NCBI Taxonomy (https://www.ncbi.nlm.nih.gov/taxonomy)"
+
 
 def get_closest_protein_bag(taxid):
     if not taxid:
@@ -772,7 +761,7 @@ def get_closest_hmm(taxid):
 
     lineage, ranks = get_lineage(taxid)
 
-    is_mammal = MAMMALS in lineage
+    is_mammal = MAMMAL in lineage
     best_lineage = None
     best_taxid = None
     best_score = 0
@@ -829,7 +818,7 @@ def get_closest_ortho_ref_taxid(taxid):
 
     lineage, ranks = get_lineage(taxid)
     
-    is_mammal = MAMMALS in lineage
+    is_mammal = MAMMAL in lineage
     best_lineage = None
     best_taxid = None
     best_score = 0
@@ -872,9 +861,9 @@ def get_max_intron(taxid):
     if not taxid:
         return 0, 0
     lineage, _ = get_lineage(taxid)
-    if PLANTS in lineage:
+    if VIRIDIPLANTAE in lineage:
         return 300000, 3000000000
-    elif VERTEBRATES in lineage:
+    elif VERTEBRATE in lineage:
         return 1200000, 2000000000
     else:
         return 600000, 500000000
@@ -942,6 +931,86 @@ def print_statistics(output):
         print(f"{k:12s} {counter[k]}")
 
 
+# Map of tasks to report effective values, key is the task name, value is a set of parameter names
+report_effective_values = {
+    "setup_genome/get_genome_info" : {"max_intron"},
+}
+def collect_logs(workdir, outdir):
+    print("Collecting execution logs")
+    run_trace_path = Path(outdir) / "run.trace.txt"
+    if not os.path.exists(run_trace_path):
+        return 1
+    with open(run_trace_path, "rt") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line[0] == '#':
+                continue
+            parts = line.split('\t')
+            if parts[0] == "task_id":
+                continue
+            task_id, hash, _, name = parts[:4]
+            name_parts = name.split(":")
+            if name_parts[0] == "egapx":
+                name_parts = name_parts[1:]
+            # if name ends with (number), remove it and add number as a suffix
+            mo = re.match(r'(.*)\s+\((\d+)\)$', name_parts[-1])
+            if mo:
+                name_parts[-1] = f"{mo.group(1)}_{mo.group(2)}"
+            task_key = os.path.join(*name_parts)
+            task_dst = Path(outdir) / "execution_logs" / task_key
+            os.makedirs(task_dst, exist_ok=True)
+            # The following code is specific to the cloud used. Two cases, AWS and filesystem are implemented
+            # now. Potential future support for other cloud providers is possible.
+            # Get full name of task workdir from hash
+            hash_parts = hash.split("/")
+            if workdir.startswith("s3://"):
+                # AWS S3
+                task_workdir_stub = os.path.join(workdir, hash)
+                cp = subprocess.run(["aws", "s3", "ls", task_workdir_stub], check=True, capture_output=True)
+                # parse output in form PRE dirname/
+                lines = cp.stdout.decode('utf-8').split('\n')
+                # print(lines)
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("PRE "):
+                        task_workdir = os.path.join(workdir, hash_parts[0], line[4:])
+                        break
+                subprocess.run(["aws", "s3", "cp", task_workdir, task_dst, "--recursive", "--exclude", "*", "--include", ".command.*"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            elif workdir.startswith("gs://"):
+                # Google Cloud Storage, not yet implemented
+                print("Collecting logs from Google Cloud Storage is not yet implemented")
+            elif workdir.startswith("az://"):
+                # Azure Blob Storage, not yet implemented
+                print("Collecting logs from Azure Blob Storage is not yet implemented")
+            else:
+                # Local filesystem
+                task_workdir_stub = os.path.join(workdir, hash_parts[0])
+                cp = subprocess.run(["ls", "-1", task_workdir_stub], check=True, capture_output=True)
+                lines = cp.stdout.decode('utf-8').split('\n')
+                # print(lines)
+                for line in lines:
+                    if line.startswith(hash_parts[1]):
+                        task_workdir = os.path.join(task_workdir_stub, line)
+                        break
+                cp = subprocess.run(f"cp {task_workdir}/.command.* {task_dst}", shell=True, check=True, capture_output=True)
+            logs = glob.glob(os.path.join(task_dst, ".command.*"))
+            for log in logs:
+                os.rename(log, os.path.join(task_dst, os.path.basename(log)[1:]))
+            if task_key in report_effective_values:
+                parameter_names = report_effective_values[task_key]
+                effective_value_log = Path(task_dst) / "command.log"
+                effective_values = []
+                with open(effective_value_log, 'rt') as f:
+                    for line in f:
+                        parts = line.strip().split(None, 1)
+                        if parts[0] in parameter_names:
+                            effective_values.append((parts[0], parts[1]))
+                for parameter_name, effective_value in effective_values:
+                    print(f"Effective parameter {parameter_name} is {effective_value}")
+            # print(f"collected from {hash}, task {name} {task_workdir} to {task_dst}")
+    return 0
+
+
 def get_software_version():
     global software_version
     if not software_version or software_version[0] == '$':
@@ -999,11 +1068,10 @@ def main(argv):
         return 1
     
     # Check for workdir, set if not set, and manage last used workdir
-    if not manage_workdir(args):
+    workdir = get_workdir(args)
+    if not workdir:
         return 1
    
-    files_to_delete = []
-    
     # Read default task parameters into a dict
     task_params = yaml.safe_load(open(Path(script_directory) / 'assets' / 'default_task_params.yaml', 'r'))
     run_inputs = repackage_inputs(yaml.safe_load(open(args.filename, 'r')))
@@ -1018,7 +1086,7 @@ def main(argv):
     # In GNOMON's chainer module, the default is -minlen 165 and -minscor 25.0,
     # use -minlen 225 and -minscor 40.0 for Magnoliopsida and Vertebrates,
     lineage, _ = get_lineage(run_inputs['input']['taxid'])
-    if MAGNOLIOPSIDA in lineage or VERTEBRATES in lineage:
+    if MAGNOLIOPSIDA in lineage or VERTEBRATE in lineage:
         minlen = 225
         minscor = 40.0
     else:
@@ -1058,6 +1126,9 @@ def main(argv):
     if args.summary_only:
         print_statistics(run_inputs['output'])
         return 0
+    
+    if args.logs_only:
+        return collect_logs(workdir, run_inputs['output'])
 
     # Reformat reads into pairs in fromPairs format and add reads_metadata.tsv file
     prepare_reads(run_inputs)
@@ -1075,6 +1146,9 @@ def main(argv):
     # Move output from YAML file to arguments to have more transparent Nextflow log
     output = task_params['output']
     del task_params['output']
+    # if output directory does not exist, it will be created
+    if not os.path.exists(output):
+        os.makedirs(output)
 
     if args.func_name:
         task_params['func_name'] = args.func_name
@@ -1102,9 +1176,6 @@ def main(argv):
    
     nf_cmd += ["-with-dag", 'dag.dot']
     nf_cmd += ["-with-trace", f"{output}/run.trace.txt"]
-    # if output directory does not exist, it will be created
-    if not os.path.exists(output):
-        os.makedirs(output)
     params_file = Path(output) / "run_params.yaml"
     nf_cmd += ["-params-file", str(params_file)]
 
@@ -1119,24 +1190,26 @@ def main(argv):
         resume_file = Path(output) / "resume.sh"
         with open(resume_file, 'w') as f:
             f.write("#!/bin/bash\n")
+            f.write(f"NXF_WORK={workdir} ")
             f.write(" ".join(map(str, nf_cmd)))
             f.write(" -resume")
             if os.environ.get('NXF_WORK'):
                 f.write(" -work-dir " + os.environ['NXF_WORK'])
             f.write("\n")
+        with open(Path(output) / "run_work_dir.txt", "wt") as f:
+            f.write(workdir)
         try:
-            subprocess.run(nf_cmd, check=True, capture_output=(args.verbosity <= VERBOSITY_QUIET), text=True)
+            env = os.environ.copy()
+            env['NXF_WORK'] = workdir
+            subprocess.run(nf_cmd, check=True, capture_output=(args.verbosity <= VERBOSITY_QUIET), text=True, env=env)
         except subprocess.CalledProcessError as e:
             print(e.stderr)
             print(f"To resume execution, run: sh {resume_file}")
-            if files_to_delete:
-                print(f"Don't forget to delete file(s) {' '.join(files_to_delete)}")
             return 1
+    if not args.dry_run:
+        collect_logs(workdir, output)
     if not args.dry_run and not args.stub_run:
         print_statistics(output)
-    # TODO: Use try-finally to delete the metadata file
-    for f in files_to_delete:
-        os.unlink(f)
 
     return 0
 

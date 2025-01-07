@@ -51,6 +51,7 @@ workflow egapx {
         genome_size_threshold // the threshold for calculating actual max intron length
         ortho_files     // files reference genome sequence and annotation for find_orthology
         reference_sets  // reference sets, for now only swissprot
+        prot_denylist   // path to protein denylist
         task_params     // task parameters for every task
     main:
         print "workflow.container: ${workflow.container}"
@@ -58,7 +59,7 @@ workflow egapx {
         def setup_genome_params = task_params.get('setup', [:])
         setup_genome_params['max_intron'] = max_intron
         setup_genome_params['genome_size_threshold'] = genome_size_threshold
-        def (scaffolds, gencoll_asn, unpacked_genome, genome_asn, genome_asnb, eff_max_intron) = setup_genome(genome, organelles, setup_genome_params)
+        (scaffolds, gencoll_asn, unpacked_genome, genome_asn, genome_asnb, eff_max_intron) = setup_genome(genome, organelles, setup_genome_params)
 
         // Protein alignments
         def protein_alignments = []
@@ -106,7 +107,7 @@ workflow egapx {
         def stats_dir = []
         def annotated_genome_file = []
         def annotation_data_comment_file = []
-        annot_proc_plane(gnomon_models, gencoll_asn, genome_asn, genome_asnb, scaffolds, tax_id, symbol_format_class, ortho_files, reference_sets, task_params)
+        annot_proc_plane(gnomon_models, gencoll_asn, genome_asn, genome_asnb, scaffolds, tax_id, symbol_format_class, ortho_files, reference_sets, prot_denylist, task_params)
         locus_out = annot_proc_plane.out.locus
         final_asn_out = annot_proc_plane.out.final_asn_out
         accept_annot_file = annot_proc_plane.out.accept_annot_file
@@ -132,5 +133,8 @@ workflow egapx {
         stats = stats_dir
         annotated_genome_asn = annotated_genome_file
         annotation_data_comment = annotation_data_comment_file
+        gnomon_summaries = gnomon_plane.out.gnomon_summaries
+        gnomon_quality_report = gnomon_plane.out.gnomon_quality_report
+        gnomon_report = gnomon_plane.out.gnomon_report
         //converted_outs = converted_outs
 }

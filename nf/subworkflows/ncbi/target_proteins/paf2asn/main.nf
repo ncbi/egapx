@@ -31,7 +31,8 @@ process run_paf2asn {
     output:
         path 'output/*.asn', emit: 'asn_file'
     script:
-        def asn_name = paf_file.baseName.toString() + ".asn"    
+        def asn_name = paf_file.baseName.toString() + ".align.asn"    // fails when it it multiple files (paf_file)
+        //def asn_name = "paf_file.align.asn"    // this could be multiple files (paf_file)
     """
     mkdir -p output
     lds2_indexer -source LDS_Index
@@ -39,7 +40,7 @@ process run_paf2asn {
     paf2asn ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank -input-manifest input.mft -o output/${asn_name}
     """
     stub:
-        def asn_name = paf_file.baseName.toString() + ".asn"    
+        def asn_name = paf_file.baseName.toString() + ".align.asn"    
     """
     mkdir -p output
     touch output/${asn_name}

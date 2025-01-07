@@ -20,11 +20,12 @@ workflow gnomon_wnode {
         String annot_params =  merge_params("-margin 1000 -mincont 1000 -minlen 225 -mpp 10.0 -ncsp 25 -window 200000 -nonconsens -open", parameters, 'annot_wnode')
         String gpx_qdump_params =  merge_params("-unzip '*' -slices-for affinity -sort-by affinity", parameters, 'gpx_qdump')
 
-        def (jobs, lines_per_file) = gpx_qsubmit(scaffolds, chains, chains_slices, gpx_qsubmit_params)
-        def annot_files = annot(jobs.flatten(), chains, hmm_params, softmask_lds2, softmask_lds2_source, genome, proteins, lines_per_file, annot_params)
-        gpx_qdump(annot_files.collect(), gpx_qdump_params)
+        (jobs, lines_per_file) = gpx_qsubmit(scaffolds, chains, chains_slices, gpx_qsubmit_params)
+        annot_files = annot(jobs.flatten(), chains, hmm_params, softmask_lds2, softmask_lds2_source, genome, proteins, lines_per_file, annot_params)
+        (models, slices) = gpx_qdump(annot_files.collect(), gpx_qdump_params)
     emit:
-        outputs = gpx_qdump.out.outputs
+        gn_models = models
+        gn_models_slices = slices 
 }
 
 
@@ -96,7 +97,7 @@ process annot {
 
     lds2=indexed_lds
     if [ -n "$softmask" ]; then
-        mkdir sm_src
+        mkdir -p sm_src
         mv $softmask ./sm_src/
         lds2_indexer -source ./sm_src/ -db softmask_lds2
         lds2+=",softmask_lds2"
@@ -114,9 +115,9 @@ process annot {
     # with the same filename. We need to avoid that to be able to stage
     # the output files for gpx_make_outputs. We add the job file numeric
     # extension as a prefix to the filename.
-    mkdir interim
+    mkdir -p interim
     annot_wnode $params -nogenbank -lds2 \$lds2  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -param $hmm_params -O interim || true
-    mkdir output
+    mkdir -p output
     for f in interim/*; do
         if [ -f \$f ]; then
             mv \$f output/\${extension}_\$(basename \$f)
@@ -137,7 +138,8 @@ process gpx_qdump {
         path files, stageAs: "inputs/*"
         val params
     output:
-        path "*.out", emit: "outputs"
+        path "*.out", emit: "gn_models"
+        path "*.out.slices", emit: "gn_models_slices"
     script:
     """
     gpx_qdump $params  -input-path inputs -output gnomon_wnode.out
@@ -145,5 +147,6 @@ process gpx_qdump {
     stub:
     """
     touch gnomon_wnode.out
+    touch gnomon_wnode.out.slices
     """
 }

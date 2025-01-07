@@ -39,7 +39,7 @@ workflow miniprot {
 
 process split_proteins {
     input:
-        path fasta_proteins_file
+        path fasta_proteins_file, stageAs: 'inputs/input_prots.faa*'
         val  items_per_chunk
     output:
         path 'output/*'
@@ -57,14 +57,14 @@ process split_proteins {
             if line and line[0] == '>':
                 items += 1
                 if items >= ${items_per_chunk}:
-                    with open(f"output/{nextfile}.fa", "w") as outf:
+                    with open(f"output/{nextfile}.prots.faa", "w") as outf:
                         outf.write(''.join(chunk))
                         chunk = []
                         nextfile += 1
                         items = 1
             chunk.append(line)
         if chunk:
-            with open(f"output/{nextfile}.fa", "w") as outf:
+            with open(f"output/{nextfile}.prots.faa", "w") as outf:
                 outf.write(''.join(chunk))
     """
     stub:

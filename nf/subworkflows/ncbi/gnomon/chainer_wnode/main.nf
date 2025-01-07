@@ -121,9 +121,9 @@ process run_chainer {
     # with the same filename. We need to avoid that to be able to stage
     # the output files for gpx_make_outputs. We add the job file numeric
     # extension as a prefix to the filename.
-    mkdir interim
+    mkdir -p interim
     chainer_wnode $params -start-job-id \$start_job_id  -workers 32 -input-jobs ${job} -O interim -nogenbank -lds2 LDS2 -evidence-denylist-manifest evidence_denylist.mft -gap-fill-allowlist-manifest gap_fill_allowlist.mft -param ${hmm_params} -scaffolds-manifest scaffolds.mft -trusted-genes-manifest trusted_genes.mft
-    mkdir output
+    mkdir -p output
     for f in interim/*; do
         if [ -f \$f ]; then
             mv \$f output/\${extension}_\$(basename \$f)
