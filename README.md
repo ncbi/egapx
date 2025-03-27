@@ -1,5 +1,4 @@
 # Eukaryotic Genome Annotation Pipeline - External (EGAPx) 
-
 EGAPx is the publicly accessible version of the updated NCBI [Eukaryotic Genome Annotation Pipeline](https://www.ncbi.nlm.nih.gov/refseq/annotation_euk/process/). 
 
 EGAPx takes an assembly FASTA file, a taxid of the organism, and RNA-seq data. Based on the taxid, EGAPx will pick protein sets and HMM models. The pipeline runs `miniprot` to align protein sequences, and `STAR` to align RNA-seq to the assembly. Protein alignments and RNA-seq read alignments are then passed to `Gnomon` for gene prediction. In the first step of `Gnomon`, the short alignments are chained together into putative gene models. In the second step, these predictions are further supplemented by _ab-initio_ predictions based on HMM models. Functional annotation is added to the final structural annotation set based on the type and quality of the model and orthology information. The final annotation for the input assembly is produced as a `gff` file. 
@@ -28,9 +27,25 @@ EGAPx has dependencies in and outside of its execution path that include several
 **License:**
 See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
 
-
+# Contents
+<!-- TOC -->
+- [Prerequisites](#prerequisites)
+- [The workflow files](#the-workflow-files)
+- [Input data format](#input-data-format)
+- [Input example](#input-example)
+- [Run EGAPx](#run-egapx)
+- [Test run](#test-run)
+- [Output](#output)
+- [Interpreting Output](#interpreting-output)
+- [Intermediate files](#intermediate-files)
+- [Offline mode](#offline-mode)
+- [Modifying default parameters](#modifying-default-parameters)
+- [References](#references)
+- [Contact us](#contact-us)
+<!-- /TOC -->
 
 ## Prerequisites
+[Back to Top](#) 
 
 - Docker or Singularity  
 - AWS batch, UGE cluster, or a r6a.4xlarge machine (32 CPUs, 256GB RAM) 
@@ -42,6 +57,7 @@ Notes:
 - See Nextflow installation at https://www.nextflow.io/docs/latest/getstarted.html
 
 ## The workflow files
+[Back to Top](#) 
 
 - Clone the EGAPx repo:
   ```
@@ -50,6 +66,7 @@ Notes:
   ```
 
 ## Input data format
+[Back to Top](#) 
 
 Input to EGAPx is in the form of a YAML file. 
 
@@ -101,7 +118,8 @@ Input to EGAPx is in the form of a YAML file.
     ```
 
 ## Input example
- 
+[Back to Top](#) 
+
 - A test example YAML file `./examples/input_D_farinae_small.yaml` is included in the `egapx` folder. Here, the RNA-seq data is provided as paths to the reads FASTA files. These FASTA files are a sampling of the reads from the complete SRA read files to expedite testing. 
 
 
@@ -162,6 +180,7 @@ Input to EGAPx is in the form of a YAML file.
 - First, test EGAPx on the example provided (`input_D_farinae_small.yaml`, a dust mite) to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_stellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.  
 
 ## Run EGAPx
+[Back to Top](#)
 
 - The `egapx` folder contains the following directories:
     - examples
@@ -259,6 +278,7 @@ Input to EGAPx is in the form of a YAML file.
 
 
 ## Test run
+[Back to Top](#)
 
 ```
 $ python3 ui/egapx.py examples/input_D_farinae_small.yaml -e aws -o example_out -w s3://temp_datapath/D_farinae
@@ -336,6 +356,7 @@ transcript   4
 ```
 
 ## Output
+[Back to Top](#)
 
 Look at the output in the out diectory (`example_out`) that was supplied in the command line. The annotation file is called `complete.genomic.gff`. 
 ```
@@ -380,6 +401,7 @@ Description of the logs and miscellaneous outputs:
 * `validated`: directory containing validation warnings and errors for annotated features. Used for submission to GenBank.
 
 ## Interpreting Output
+[Back to Top](#)
 
 `stats/feature_counts.xml` contains summary counts of features by model prediction categories determined by Gnomon.
 
@@ -392,6 +414,7 @@ Counts of protein-coding genes should be considered versus similar species. Low 
 `stats/feature_stats.xml` contains summary statistics on transcript counts per gene, exon counts per transcript, and the counts and length distributions of features by sub-type.
 
 ## Intermediate files
+[Back to Top](#)
 
 In the nextflow log, you can find work directory paths for each job. You can go to that path, and look for the output files and command logs. For example, to see the files generated during run_miniprot job, run the following command to get the directory path, and list the files within that directory.
 
@@ -415,6 +438,7 @@ aws s3 ls s3://ncbi-egapx-expires/work/D_farinae/86/68836c310a571e6752a33a221d19
 ```
 
 ## Offline mode
+[Back to Top](#)
 
 If you do not have internet access from your cluster, you can run EGAPx in offline mode. To do this, you would first pull the Singularity image, then download the necessary files from NCBI FTP using `egapx.py` script, and then finally use the path of the downloaded folder in the run command. Here is an example of how to download the files and execute EGAPx in the Biowulf cluster. 
 
@@ -465,6 +489,7 @@ ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -
 ```
 
 ## Modifying default parameters
+[Back to Top](#)
 
 The default task parameter values are listed in the file `ui/assets/default_task_params.yaml`. If there are cases where you need to change some task parameters from the default values, you can add those to the input yaml file.  For example, if you're using RNA-seq from species besides the one being annotated, you can relax the alignment criteria by setting the following parameters in your input yaml:
 
@@ -481,6 +506,7 @@ tasks:
 
 
 ## References
+[Back to Top](#)
 
 Buchfink B, Reuter K, Drost HG. Sensitive protein alignments at tree-of-life scale using DIAMOND. Nat Methods. 2021 Apr;18(4):366-368. doi: 10.1038/s41592-021-01101-x. Epub 2021 Apr 7. PMID: 33828273; PMCID: PMC8026399.
 
