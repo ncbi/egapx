@@ -45,7 +45,7 @@ See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
 <!-- /TOC -->
 
 ## Prerequisites
-[Back to Top](#) 
+[Back to Top](#Contents) 
 
 - Docker or Singularity  
 - AWS batch, UGE cluster, or a r6a.4xlarge machine (32 CPUs, 256GB RAM) 
