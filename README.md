@@ -8,7 +8,7 @@ We currently have protein datasets posted that are suitable for most vertebrates
   - Insecta - Hymenoptera, Diptera, Lepidoptera, Coleoptera, Hemiptera 
   - Arthropoda - Arachnida, other Arthropoda
 
-  - Monocots - Lilipopsida
+  - Monocots - Liliopsida
   - Eudicots - Asterids, Rosids, Fabids, Caryophyllales
   
 
