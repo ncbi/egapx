@@ -1,0 +1,5 @@
+genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/015/227/805/GCA_015227805.3_bHirRus1.pri.v3/GCA_015227805.3_bHirRus1.pri.v3_genomic.fna.gz
+short_reads: txid43150[Organism] AND 75:350[ReadLength] AND illumina[Platform] AND biomol_rna[Properties]
+long_reads: txid43150[Organism] AND (oxford_nanopore[Platform] OR pacbio_smrt[Platform]) AND biomol_rna[Properties]
+taxid: 43150
+locus_tag_prefix: egapxtmp

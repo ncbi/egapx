@@ -2,14 +2,13 @@
 nextflow.enable.dsl=2
 
 
-
 /*
  *   align_filter -filter 'pct_coverage >= 50' -nogenbank 
  *      | align_sort -ifmt seq-align-set -k query,-bit_score,slen,-align_length -group 1 -top 1 -nogenbank
  */
 
 
-include { merge_params; to_map; shellSplit } from '../../utilities'
+include { merge_params } from '../../utilities'
 
 
 workflow best_protein_hits {
@@ -19,8 +18,8 @@ workflow best_protein_hits {
         prot_alignments
         parameters  // Map : extra parameter and parameter update
     main:
-        String align_filter_params = merge_params(' -ifmt seq-align-set -filter \'pct_coverage >= 50\' -nogenbank', parameters, 'align_filter')
-        String align_sort_params = merge_params(' -ifmt seq-align-set -k query,-bit_score,slen,-align_length -group 1 -top 1 -nogenbank', parameters, 'align_sort')
+        String align_filter_params = merge_params('-ifmt seq-align-set -nogenbank', parameters, 'align_filter')
+        String align_sort_params = merge_params('-ifmt seq-align-set -nogenbank', parameters, 'align_sort')
 
         run_protein_filter_replacement(gnomon_prot_asn, swiss_prot_asn, prot_alignments, align_filter_params, align_sort_params)
 
@@ -55,6 +54,8 @@ process run_protein_filter_replacement {
     """
 
     stub:
+    println("best_protein_hits align_filter parameters: $align_filter_params")
+    println("best_protein_hits align_sort parameters: $align_sort_params")
     """
     mkdir -p output
     touch ./output/best_protein_hits.asnb

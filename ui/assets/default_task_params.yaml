@@ -18,7 +18,7 @@ tasks:
       0.95 -minlen 225 -minpolya 6 -minprotfrac 0.9 -minscor 40.0 -minsupport 3 -minsupport_mrna
       1 -minsupport_rnaseq 5 -mrnaCDS use_objmgr -oep 10 -protcdslen 450 -sharp-boundary
       0.2 -tolerance 3 -trim 6 -utrclipthreshold 0.01 -fillgenomicgaps -filterest
-      -filtermrna -filterprots -opposite
+      -filtermrna -filterprots -opposite -collapsest
     gpx_make_outputs: -default-output-name chains -slices-for affinity -sort-by affinity
     input_aligns_sort: merge_only
     submit_chainer: -minimum-abut-margin 20 -separate-within-introns
@@ -48,12 +48,23 @@ tasks:
   star_wnode:
     star_wnode: -preserve-star-logs
     star-params: --alignSJoverhangMin 8 --outFilterMultimapNmax 200 --outFilterMismatchNmax
-      50 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes
-      'NH HI AS nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
-      50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None 
+      50 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes 'NH HI AS
+      nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
+      50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None
   miniprot:
     split_proteins: -n 25000
     miniprot: -t 31 -p 0.4 --outs=0.4
+  minimap2_index:
+    minimap2_index: -k 15 -w 5
+  minimap2_wnode:
+    gpx_qsubmit: -batch-size 5000 -max-execs 100
+    minimap2_wnode: -est_colocation_weight 0 -min-entropy 0.65
+      -workers 1 -generate-stats
+      -output_one_orientation_only -trust_input_collation -with-best-placement
+    minimap2-params: -x splice --eqx --MD --cs -Y --sam-hit-only -M 0.9 -p 0.1 -N 25
+  filter_est_align:
+    align_filter: -filter '((matches >= 100 && splices > 0) || (matches >= 250 && splices == 0)) && product_coverage >= 0.35 && exon_identity >= 0.85 && consensus_splices >= MUL(SUB(exon_count,1),2) && ((max_intron_len < 200000 && (pct_identity_ungap < 98 || pct_coverage < 90)) || max_intron_len < 1300000) && SUB(subject_end,subject_start)<5000000 && rank == 1'
+    align_sort: -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   paf2asn:
     paf2asn: -prosplign-refinement
   best_aligned_prot:
@@ -65,13 +76,15 @@ tasks:
   gnomon_training:
     gnomon_training: -asn -b
   diamond_identify:
-    diamond: -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits -ofmt seq-align-set
-    diamond_blastp: --sam-query-len --comp-based-stats 0 --evalue 0.0001 --very-sensitive --masking 0 --unal 0
+    diamond: -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits -ofmt seq-align-set 
+    diamond_blastp: --sam-query-len --comp-based-stats 1 --evalue 0.0001 --very-sensitive --masking 1 --unal 0
   diamond_orthology:
     diamond: -ofmt seq-align-set -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits
     diamond_blastp: --sam-query-len --very-sensitive --unal 0 --max-target-seqs 100 --comp-based-stats 0 --masking 0
   gnomon_biotype:
     gnomon_biotype: ''
+  gnomon_evidence_summary:
+    gnomon_evidence_summary: ''
   find_orthologs:
     find_orthologs: ''
   locus_link:
@@ -79,12 +92,14 @@ tasks:
   locus_track:
     locus_track: ''
   final_asn_markup:
-    final_asn: '-annot-provider "GenBank submitter" -annot-pipeline "NCBI EGAPx"'
+    final_asn: -annot-provider "GenBank submitter" -annot-pipeline "NCBI EGAPx"
+  generate_fasta_from_annots:
+    gnomon_asn2fasta: -it -one-per-gene -primary-only -separate-by-unit
   extract_products_from_models:
     extract_products: ''
   best_protein_hits:
-    align_filter: " -filter 'pct_coverage >= 50' "
-    align_sort: ' -k query,-bit_score,slen,-align_length -group 1 -top 1 '
+    align_filter: -filter 'pct_coverage >= 50'
+    align_sort: -k query,-bit_score,slen,-align_length -group 1 -top 1
   annot_builder:
     annot_builder: ''
   annotwriter:
@@ -92,3 +107,28 @@ tasks:
   convert_annotations:
     annotwriter_gff: ''
     annotwriter_gtf: ''
+  gnomon_add_filtering_scores:
+    gnomon_filter_models: ''
+  convert_summary_files:
+    convert_summary_files: ''
+  get_hmm_params:
+    get_hmm_params: ''
+  winmask_wnode:
+    gpx_make_outputs: -unzip '*'
+    gpx_qsubmit: -batch-size 1
+    winmasker_wnode: ''
+  prepare_masks: 
+    convert_mask: -ifmt contaminant-mask -ofmt blast-mask -types rRNA -exclude-pseudo -blast-algo-options 'GPIPE&Ribosomal%20RNA&&'
+    convert_mask_hardmask: -ifmt blast-mask -ofmt ftable -name 'NCBI-GPipe-Hardmask'
+    convert_mask_softmask: -ifmt blast-mask -ofmt ftable -name 'NCBI-GPipe-Softmask'
+    combine_blast_db: -blast-algo-program 100 -blast-algo-options 'GPIPE&windowmasker%20%2B%20Ribosomal%20RNA&&'
+    combine_blast_db_hardmask: -blast-algo-program 100 -blast-algo-options 'GPIPE&NCBI%2DGPipe%2DHardmask&&Foreign%20Contamination'
+    combine_blast_db_softmask: -blast-algo-program 100 -blast-algo-options 'GPIPE&NCBI%2DGPipe%2DSoftmask&&Foreign%20Contamination'
+  make_winmask_stats:
+    make_winmask_stats: -infmt seqids -sformat obinary -smem 1024
+  gc_makeblastdb:
+    gc_makeblastdb: ''
+  cmsearch:
+    num_batches: 16
+    cmsearch_wnode: -exclusive-threshold 100000
+    annot_merge: -euk -unique

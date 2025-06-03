@@ -5,7 +5,6 @@ include { merge_params } from '../../utilities'
 
 
 process build_index {
-    debug true
     label 'big_job'
     input:
         path genome_file

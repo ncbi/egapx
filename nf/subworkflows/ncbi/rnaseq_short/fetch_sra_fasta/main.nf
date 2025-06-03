@@ -32,7 +32,7 @@ process read_sra_file {
 
     stub:
     """
-    exitvar=SRA000001
+    exitvar="SRA000001 SRA000002"
     """
 }
 
@@ -46,7 +46,7 @@ process run_fetch_sra_fasta {
     """
     output_${sra}=\$(srapath ${sra})
     curl -o ${sra} \$output_${sra}
-    fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\\\$ac.\\\$si.\\\$ri" --fasta -O .  ./${sra}
+    fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">gnl|SRA|\\\$ac.\\\$si.\\\$ri" --fasta -O .  ./${sra}
     rm -f ${sra}
     mkdir -p output
     if [ -f ${sra}_1.fasta ]; then

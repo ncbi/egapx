@@ -56,15 +56,15 @@ process split_proteins {
         for line in f:
             if line and line[0] == '>':
                 items += 1
-                if items >= ${items_per_chunk}:
-                    with open(f"output/{nextfile}.prots.faa", "w") as outf:
+                if items > ${items_per_chunk}:
+                    with open(f"output/aligns.{nextfile}.faa", "w") as outf:
                         outf.write(''.join(chunk))
                         chunk = []
                         nextfile += 1
                         items = 1
             chunk.append(line)
         if chunk:
-            with open(f"output/{nextfile}.prots.faa", "w") as outf:
+            with open(f"output/aligns.{nextfile}.faa", "w") as outf:
                 outf.write(''.join(chunk))
     """
     stub:

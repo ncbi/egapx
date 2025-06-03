@@ -1,0 +1,16 @@
+for_refseq	model_id = best_model_id OR ((FullSupCDS = 1 OR cds_len = 0) AND Pseudo = 0 AND 5_partial = 0 and 3_partial = 0 AND (SRS_introns_full > 0 OR minimum_alignments_introns = 1)) NOT (model_count = 1 and cds_len = 0 and splices < 2 and (5exon_len < 30 or 3exon_len < 30)) NOT (best_cds_len = 0 and cds_len = 0 and ((splices = 0 or DIV(nonconsensus_splices,splices) > 0.20) OR (splices < 2 and polya = 0) OR (mrnas = 0 AND ests < 3 AND avg_intron_coverage < 5) ) )
+coding	model_id = best_model_id OR NMD = 0 OR NOT (best_NMD = 0)
+model_score	ADD(MUL(COALESCE(DIV(min_intron_coverage, best_min_intron_coverage), 0), 10), ADD(MUL(COALESCE(DIV(coding_propensity, best_coding_propensity), 0), 5), SUB(SUB(splices, best_splices), nonconsensus_splices)))
+avg_base_coverage
+IF splices > 0 THEN avg_intron_coverage
+IF splices > 0 THEN pct_introns_with_transcripts MUL(DIV(supported_introns_same_species,num_introns),100)
+IF splices > 0 THEN minimum_alignments_introns_same_species 
+pct_ab_initio ab_initio
+IF num_frameshifts > 0 THEN num_frameshifts
+IF num_codebreaks > 0 THEN num_internal_stop_codons num_codebreaks
+IF gap_bases > 0 THEN gap_bases
+protein_len
+IF 5_partial > 0 THEN N_term_partial 5_partial
+IF 3_partial > 0 THEN C_term_partial 3_partial
+NMD
+coding_propensity

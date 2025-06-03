@@ -1,6 +1,4 @@
 genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/029/603/195/GCA_029603195.2_ASM2960319v2/GCA_029603195.2_ASM2960319v2_genomic.fna.gz
 reads: txid2530218[Organism] AND biomol_transcript[properties] NOT SRS024887[Accession]
 taxid: 2530218
-annotation_provider: GenBank submitter
-annotation_name_prefix: GCA_029603195.2
 locus_tag_prefix: egapxtmp

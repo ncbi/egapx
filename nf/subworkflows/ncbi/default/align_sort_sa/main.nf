@@ -14,7 +14,7 @@ workflow align_sort_sa {
     main:
         default_params = ""
         effective_params = merge_params(default_params, parameters, 'align_sort')
-        run_align_sort( genome_asn, proteins_asn, alignments, effective_params)
+        run_align_sort(genome_asn, proteins_asn, alignments, effective_params)
 
     emit:
         sorted_asn_file = run_align_sort.out.sorted_asn_file
@@ -24,11 +24,11 @@ workflow align_sort_sa {
 process run_align_sort {
     input:
         path genome, stageAs: 'LDS_Index/genome.asnt'
-        path proteins,  stageAs: 'LDS_Index/proteins.asnt'
+        path proteins, stageAs: 'LDS_Index/proteins.asnt'
         path alignments
         val parameters
     output:
-        path ('output/sorted_aligns.asn')  , emit: 'sorted_asn_file'
+        path ('output/*.asn')  , emit: 'sorted_asn_file'
     script:
     """
     mkdir -p output
@@ -41,6 +41,7 @@ process run_align_sort {
     stub:
     """
     mkdir -p output
-    touch output/sorted_aligns.asn
+    name=`echo "${alignments.join('\n')}" | md5sum | cut -c-16`
+    touch output/\${name}.sorted_aligns.asn
     """
 }

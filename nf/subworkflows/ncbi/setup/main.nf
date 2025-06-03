@@ -18,6 +18,8 @@ workflow setup_genome {
         genome_asnb = info.genome_asnb
         max_intron = info.max_intron
 }
+
+
 workflow setup_ext_genome {
     take:
         genome
@@ -36,7 +38,6 @@ workflow setup_ext_genome {
 
 
 process get_genome_info {
-    debug true
     input:
         path input_genome_file, stageAs: 'src/*'
         path organelles
@@ -62,7 +63,9 @@ process get_genome_info {
         genome_asn = genome_dir + "/" + base_name_stripped + ".asn"
         genome_asnb = genome_dir + "/" + base_name_stripped + ".asnb"
         max_intron = parameters.max_intron
-        genome_size_threshold = parameters.genome_size_threshold  
+        genome_size_threshold = parameters.genome_size_threshold
+        submitter = parameters.annotation_provider
+        name_prefix = parameters.annotation_name_prefix
         lcl_id_cmd = "cat"
         if(localize_ids) {
             lcl_id_cmd = "sed 's/>\\([^ |]\\+\\)\\( .*\\)\\?\$/>lcl\\|\\1\\2/'"
@@ -118,13 +121,13 @@ process get_genome_info {
     ##multireader -flags ParseRawID -out-format asn_binary -input ${out_fasta} -output ${genome_asnb}
     #lds2_indexer -source ${genome_dir}/ -db LDS2
     # Using all parts of multipart ids is preferrable, but slower - one more pass over genomic FASTA
-    gc_create -unplaced ${out_fasta} -unplaced-fmt fasta -fasta-parse-raw-id -gc-assm-name "EGAPx Test Assembly" -nogenbank -asn-cache ./asncache/ >${base_name_stripped}-gencoll.asn
+    gc_create -unplaced ${out_fasta} -unplaced-fmt fasta -fasta-parse-raw-id -gc-assm-name "$name_prefix" -nogenbank -asn-cache ./asncache/ >${base_name_stripped}-gencoll.asn
     gc_get_molecules -gc-assembly ${base_name_stripped}-gencoll.asn -filter all -level top-level > list.seqids
 
     #TODO: subtract organelles from list
 
-    # This is a rough estimate because we don't need the more accurate size
-    genome_size=`wc -c <${out_fasta}`
+    # Get exact genome size using seqkit.
+    genome_size=`seqkit stat --tabular ${out_fasta} | tail -n1 | cut -f5`
     # Max intron logic
     if [ $genome_size_threshold -gt 0 ] && [ \$genome_size -lt $genome_size_threshold ]; then
         # scale max intron to genome size, rounding up to nearest 100kb
@@ -176,6 +179,7 @@ workflow setup_proteins {
         proteins_asnb = convert_proteins.out.proteins_asnb
 }
 
+
 workflow setup_ext_proteins {
     take:
         proteins
@@ -187,6 +191,7 @@ workflow setup_ext_proteins {
         proteins_asn = convert_proteins.out.proteins_asn
         proteins_asnb = convert_proteins.out.proteins_asnb
 }
+
 
 process convert_proteins {
     input:
@@ -238,5 +243,4 @@ process convert_proteins {
     touch $proteins_asn
     touch $proteins_asnb
     """
-
 }
