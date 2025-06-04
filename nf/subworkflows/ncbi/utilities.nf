@@ -138,7 +138,6 @@ process clean_fasta_ids {
 }
 
 
-
 process multireader {
     input:
         path fasta_file
@@ -158,5 +157,53 @@ process multireader {
     """
         mkdir -p output
         touch output/fasta_file.asnt
+    """
+}
+
+
+process convert_mask{
+    input:
+        path mask
+        val name
+        val parameters
+    output:
+        path "output/${name}.asnb", emit: 'converted'
+    script:
+    """
+    mkdir -p output
+    echo "${mask}" > mask.mft
+    convert_mask -input-manifest mask.mft  -o output/${name}.asnb  $parameters -nogenbank
+    """
+    stub:
+    """
+    mkdir -p output
+    touch output/${name}.asnb
+    """
+}
+
+
+process combine_blast_db{
+    input:
+        //path contam_mask
+        //path rmask_data
+        //path dustmask_data
+        path winmask_data
+        //path rrna_mask_data
+        path rfam_rrna_masks
+        val name
+        val parameters
+    output:
+        path "output/${name}.asnb", emit: 'mask_asnb'
+    script:
+    """
+        mkdir -p output
+        echo "${winmask_data}" > softmask.mft
+        printf "\\n${rfam_rrna_masks}" >> softmask.mft
+        combine_blast_db -input-manifest softmask.mft -o output/${name}.asnb   $parameters
+    """
+    stub:
+    """
+    mkdir -p output
+    touch output/${name}.asnb
     """
 }

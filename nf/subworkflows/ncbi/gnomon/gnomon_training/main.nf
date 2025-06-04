@@ -42,6 +42,6 @@ process run_gnomon_training {
     println("Gnomon training parameters: ${parameters}")
     """
     mkdir -p output
-    touch  output/hmm_params.asn
+    echo "hmm_params" > output/hmm_params.asn
     """
 }

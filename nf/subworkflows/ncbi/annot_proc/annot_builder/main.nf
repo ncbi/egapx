@@ -168,9 +168,15 @@ process annot_builder_run {
     mkdir -p $outdir/REPORT
     mkdir -p $outdir/TEST
 
-    lds2_indexer -source genome/ -db LDS2
+    mkdir -p asncache
+    prime_cache -cache ./asncache/ -ifmt asn-seq-entry  -i $genome_asn  -oseq-ids genome_ids -split-sequences
+
+    ## lds2_indexer -source genome/ -db LDS2
     # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
-    annot_builder -accept-output both -nogenbank -lds2 LDS2 -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
+    echo "printing annot_builder -version"
+    annot_builder -version
+    ## annot_builder -accept-output both -nogenbank -lds2 LDS2 -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
+    annot_builder -accept-output both -nogenbank -asn-cache ./asncache/ -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
     cat ${outdir}/ACCEPT/*.ftable.annot > ${outdir}/ACCEPT/accept.ftable_annot
     """
     stub:

@@ -2,7 +2,7 @@ CONTENTS
 
   Public Domain Notice
   Exceptions (for bundled 3rd-party code)
-  Copyright F.A.Q.
+  
 
 
 
@@ -28,31 +28,56 @@ The list of third-party tools and their licenses are provided here:
 EXCEPTIONS (in all cases excluding NCBI-written makefiles):
 
 
-Location: img/gp/third-party/STAR
+Location: /img/gp/third-party/STAR
 Authors:  Alexander Dobin
 License:  MIT License
           [https://github.com/alexdobin/STAR/blob/master/LICENSE]
 
-Location: img/gp/third-party/samtools
+Location: /img/gp/third-party/samtools
 Authors:  Genome Research Ltd.
 License:  The MIT/Expat License
           [https://github.com/samtools/samtools/blob/develop/LICENSE]
 
-Location: img/gp/third-party/miniprot
+Location: /img/gp/third-party/miniprot
 Authors:  Dana-Farber Cancer Institute
 License:  MIT License
           [https://github.com/lh3/miniprot/blob/master/LICENSE.txt]
 
-Location: img/gp/third-party/diamond
+Location: /img/gp/third-party/diamond
 Authors:  Benjamin Buchfink
 License:  GNU GENERAL PUBLIC LICENSE
           [https://github.com/bbuchfink/diamond/blob/master/LICENSE]
 
-Location: img/gp/third-party/seqkit
+Location: /img/gp/third-party/seqkit
 Authors:  Wei Shen
 License:  MIT License
           [https://github.com/shenwei356/seqkit/blob/master/LICENSE]
 
+Location: /img/gp/third-party/infernal
+Authors:  Sean R. Eddy
+License:  BSD License
+          [https://github.com/EddyRivasLab/infernal/blob/master/LICENSE]
+
+Location: /img/gp/third-party/hmmer
+Authors:  Sean R. Eddy
+License:  BSD License
+          [https://github.com/EddyRivasLab/hmmer/blob/master/LICENSE]
+
+
+Location: /usr/local/bin/busco
+Authors:  Evgeny Zdobnov
+License:  MIT License
+          [https://gitlab.com/ezlab/busco/-/blob/master/LICENSE]
+
+
+Location: /img/gp/third-party/minimap2
+Authors:  Heng Li
+License:  MIT License
+          [https://github.com/lh3/minimap2/blob/master/LICENSE.txt]
+
+Resource: Swiss-prot dataset
+Authors:  The UniProt Consortium
+License:  [https://www.uniprot.org/help/license]
 ================================================================================
 
 Copyright F.A.Q.

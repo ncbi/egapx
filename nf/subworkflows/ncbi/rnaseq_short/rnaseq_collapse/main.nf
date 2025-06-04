@@ -4,6 +4,7 @@ nextflow.enable.dsl=2
 include { merge_params } from '../../utilities'
 
 
+
 workflow rnaseq_collapse {
     take:
         genome            // path: file of genomic sequences, FASTA or ASN
@@ -23,6 +24,8 @@ workflow rnaseq_collapse {
     emit:
         alignments = run_gpx_make_outputs.out.alignments
         alignment_slices = run_gpx_make_outputs.out.alignment_slices
+        exons = run_gpx_make_outputs.out.exons
+        exons_slices = run_gpx_make_outputs.out.exons_slices
 }
 
 
@@ -126,6 +129,8 @@ process run_gpx_make_outputs {
     output:
         path "output/align.*.out", emit: 'alignments'
         path "output/align.*.out.slices", emit: 'alignment_slices'
+        path "output/exon.*.out.gz", emit: 'exons'
+        path "output/exon.*.out.gz.slices", emit: 'exons_slices'
     script:
     """
     mkdir -p output
@@ -139,6 +144,8 @@ process run_gpx_make_outputs {
     for i in {1..10}; do
         touch output/align.\$i.out
         touch output/align.\$i.out.slices
+        touch output/exon.\$i.out.gz
+        touch output/exon.\$i.out.gz.slices
     done
 
     """
