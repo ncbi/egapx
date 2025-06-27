@@ -14,7 +14,7 @@ We currently have protein datasets posted that are suitable for most vertebrates
   - Eudicots - Asterids, Rosids, Fabids, Caryophyllales
   
 
-:warning: Fungi, protists and nematodes are out-of-scope for EGAPx. We recommend using a different annotation method for these organisms.
+:warning: Fungi, Protozoans, and most non-arthropod Protostomia are out-of-scope for EGAPx. We recommend using a different annotation method for these organisms.
 
 **Warning:**
 The current version is an early release and still under active development to add features and refine outputs. The workflow for GenBank submission is still under development. Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues) if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.  
