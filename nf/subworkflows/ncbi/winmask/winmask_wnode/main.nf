@@ -80,7 +80,6 @@ process run_winmask_wnode {
     output:
         path "mask/*", emit: "mask"
     script:
-        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     njobs=`wc -l <$jobs`
     if [ \$njobs -lt 16 ]; then
@@ -96,17 +95,13 @@ process run_winmask_wnode {
     (( start_job_id = ((10#\$extension) * $lines_per_file) + 1 ))
     winmasker_wnode -ustat $winmask_stats -asn-cache ./asncache/ -workers \$threads -start-job-id \$start_job_id -input-jobs $jobs -nogenbank  -O interim $parameters
     mkdir -p mask
-    for f in interim/*; do
-        if [ -f \$f ]; then
-            mv \$f mask/\${extension}_\$(basename \$f)
-        fi
-    done
+    cat interim/* > mask/winmasker_wnode.${task.index}.gpx-job.asnb
+    rm -rf interim
     """
     stub:
-        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     mkdir -p mask
-    touch mask/${job_num}.asnb
+    touch mask/winmasker_wnode.${task.index}.gpx-job.asnb
     """
 }
 

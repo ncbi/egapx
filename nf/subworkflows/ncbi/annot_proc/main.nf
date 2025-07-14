@@ -44,6 +44,8 @@ workflow annot_proc_plane {
     take:
         annotation_name_prefix
         gnomon_models
+        cmsearch_models
+        trnascan_models
         gencoll_asn
         genome_asn 
         genome_asnb
@@ -66,13 +68,12 @@ workflow annot_proc_plane {
         // might come its own plane     
         gnomon_biotype(gnomon_models,/*splices_file  -- constant*/ [],  prot_denylist, gencoll_asn, swiss_prot_asn, [], alignments, name_cleanup_rules_file, task_params.get('gnomon_biotype', [:]))
 
-        annot_builder(gencoll_asn, gnomon_models, genome_asn, task_params.get('annot_builder', [:]))
+        annot_builder(gencoll_asn, genome_asn, gnomon_models, cmsearch_models, trnascan_models, task_params.get('annot_builder', [:]))
         def accept_ftable_file = annot_builder.out.accept_ftable_annot
-        def annot_files = annot_builder.out.annot_files
 
         lxr_data = print_fake_lxr_data(tax_id, symbol_format_class, ortho_files.get('taxid',0)).lxr_data
 
-        orthology_plane(genome_asnb, gencoll_asn, gnomon_models, annot_files, ortho_files, task_params)
+        orthology_plane(genome_asnb, gencoll_asn, gnomon_models, accept_ftable_file, ortho_files, task_params)
         def orthologs = orthology_plane.out.orthologs
         def name_from_ortholog = orthology_plane.out.name_from_ortholog
 
@@ -96,7 +97,6 @@ workflow annot_proc_plane {
     emit:
         locus = locus_link.out.locus
         locustypes = locus_link.out.locustypes
-        accept_annot_file = accept_ftable_file
         final_asn_out = final_asn_markup.out.outputs
         to_convert = final_asn_markup.out.to_convert
         validated = final_asn_markup.out.validated

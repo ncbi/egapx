@@ -10,7 +10,7 @@ workflow paf2asn {
         genome_asn_file   //path: genome asn file
         proteins_asn_file //path: protein asn file
         paf_file          //path: paf alignment file from miniprot
-        parameters        // Map : extra parameter and parameter update
+        parameters        //Map : extra parameter and parameter update
     main:
         default_params = ""
         effective_params = merge_params(default_params, parameters, 'paf2asn')
@@ -37,7 +37,9 @@ process run_paf2asn {
     mkdir -p output
     lds2_indexer -source LDS_Index
     echo "${paf_file.join('\n')}" > input.mft
-    paf2asn ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank -input-manifest input.mft -o output/${asn_name}
+    paf2asn ${parameters}  -lds2 LDS_Index/lds2.db  -nogenbank -input-manifest input.mft |
+        align_filter -u -nogenbank | # deduplicate - GP-40550
+        cat > output/${asn_name}
     """
     stub:
         def asn_name = paf_file.baseName.toString() + ".align.asn"    

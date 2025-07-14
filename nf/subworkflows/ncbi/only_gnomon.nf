@@ -82,9 +82,10 @@ workflow only_gnomon {
         // prot_gnomon_prepare(models, task_params.get('prot_gnomon_prepare', [:]))
         
         // actual gnomon end but whatever
-
-
-        annot_builder(gencoll_asn, models, genome_asn, task_params.get('annot_builder', [:]))
+    
+        cmsearch_models = []
+        trnascan_models = []
+        annot_builder(gencoll_asn, genome_asn, models, cmsearch_models, trnascan_models)
         def accept_asn = annot_builder.out.accept_asn
         
         annotwriter(accept_asn, [:])

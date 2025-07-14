@@ -156,7 +156,7 @@ Input to EGAPx is in the form of a YAML file.
 
 
 ### Running EGAPx with short and long RNA-seq reads
-- Optionally, you can also include long reads RNA-seq data from SRA or local files using the same formatting structure for short reads, using the label `long_reads:`
+- Optionally, you can also include long reads RNA-seq data from SRA or local files (FASTA or FASTQ, not BAM) using the same formatting structure for short reads, using the label `long_reads:`
 
   ```
   genome: path to assembled genome in FASTA format
@@ -171,6 +171,7 @@ Input to EGAPx is in the form of a YAML file.
     short_reads: txid43150[Organism] AND 75:350[ReadLength] AND illumina[Platform] AND biomol_rna[Properties]
     long_reads: txid43150[Organism] AND (oxford_nanopore[Platform] OR pacbio_smrt[Platform]) AND biomol_rna[Properties]
     ```
+- We have not rigorously tested EGAPx performance using clustered vs. non-clustered IsoSeq reads. EGAPx uses read depth for filtering and removing rare isoforms with limited support, but clustered reads will reduce compute cost.
 
 ## Input example
 [Back to Top](#Contents)
@@ -310,7 +311,7 @@ If you do not have internet access from your cluster, you can run EGAPx in offli
   ```
   rm egap*sif
   singularity cache clean
-  singularity pull docker://ncbi/egapx:0.4.0-alpha
+  singularity pull docker://ncbi/egapx:0.4.1-alpha
   ```
 
 - Clone the repo:
@@ -343,7 +344,7 @@ If you do not have internet access from your cluster, you can run EGAPx in offli
 - Run `egapx.py` first to edit the `biowulf_cluster.config`:
   ```
   ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
-  echo "process.container = '/path_to_/egapx_0.4.0-alpha.sif'"  >> egapx_config/biowulf_cluster.config
+  echo "process.container = '/path_to_/egapx_0.4.1-alpha.sif'"  >> egapx_config/biowulf_cluster.config
   ```
 
 - Run `egapx.py`:
@@ -583,7 +584,13 @@ You will need:
   - To submit annotation for existing GenBank assemblies, you can access the BioProject information on Datasets Genome pages by searching the assembly accession at https://www.ncbi.nlm.nih.gov/datasets/genome/. locus_tag prefix is not needed in your `prepare_submission` command 
 
 - To submit annotation with new assemblies, you will need additional inputs:
-  - Source modifiers table file prepared from https://www.ncbi.nlm.nih.gov/WebSub/html/help/genbank-source-table.html
+  - Source modifiers table file (see `examples/example_source_table.src`)
+    - Tab-delimited file containing sequence identifiers, chromosome names, location, topology
+    - Chromosome names follow these [rules](https://www.ncbi.nlm.nih.gov/genbank/genomesubmit/#chr_names)
+    - Default topology is `linear`, only specify `circular` for organelles
+    - Unplaced sequences can be completely omitted from the file
+    - Rare cases of unlocalized sequences (not "the" chromosome, but with a chromosome assignment) should be included with the chromosome name in the chromosome column and blank in the location column
+
   - Assembly data structured comment file prepared from https://submit.ncbi.nlm.nih.gov/structcomment/genomes/
   - linkage evidence argument from options at https://www.ncbi.nlm.nih.gov/genbank/wgs_gapped/, e.g. `proximity-ligation` from Hi-C, `paired-ends` from Illumina
 
@@ -608,15 +615,16 @@ You are ready to run `prepare_submission`. See below for full list of required/o
 | `--submission-comment`                   | table2asn `-y` arg https://www.ncbi.nlm.nih.gov/genbank/table2asn/ |
 | `--name-cleanup-rules-file`                   | Two-column TSV of search/replace regexes to be applied to product and gene names |
 | `--source-quals`                   | table2asn `-j` arg. https://www.ncbi.nlm.nih.gov/genbank/mods_fastadefline/ |
+| `--unknown-gap-len`                   | table2asn `-gaps-unknown` arg. The exact number of consecutive Ns recognized as a gap with unknown length. (default: 100) |
 
 Command:
 
 ```
 # Using Docker:
-alias prepare_submission='docker run --rm -i --volume="$PWD:$PWD" --workdir="$PWD" ncbi/egapx:0.4.0-alpha prepare_submission'
+alias prepare_submission='docker run --rm -i --volume="$PWD:$PWD" --workdir="$PWD" ncbi/egapx:0.4.1-alpha prepare_submission'
 
 # Using Singularity or Apptainer:
-alias prepare_submission='singularity exec --cleanenv --bind "$PWD:$PWD" --pwd "$PWD" docker://ncbi/egapx:0.4.0-alpha prepare_submission'
+alias prepare_submission='singularity exec --cleanenv --bind "$PWD:$PWD" --pwd "$PWD" docker://ncbi/egapx:0.4.1-alpha prepare_submission'
 
 # Invoke the app:
 prepare_submission --egapx-annotated-genome-asn annotated_genome.asn --submission-template-file template.sbt --bioproject-id PRJNA# --src-file source-table.txt --assembly-data-structured-comment-file genome.asm --linkage-evidence paired-ends --out-dir out

@@ -15,6 +15,7 @@ include { setup_genome; setup_proteins } from './setup/main'
 include { convert_annotations } from './default/convert_annotations/main'
 include { convert_summary_files } from './default/convert_summary_files/main'
 include { cmsearch_plane } from './cmsearch/main'
+include { trnascan_plane } from './trna_scan/main'
 include { busco } from './busco/main'
 include { winmask_plane } from './winmask/main'
 
@@ -88,6 +89,7 @@ workflow egapx {
         def busco_lineage_download = input_params.get('busco_lineage_download', [])
         def annotation_provider = input_params.get('annotation_provider', []) ?: 'GenBank submitter'
         def annotation_name_prefix = input_params.get('annotation_name_prefix', []) ?: 'EGAPx Test Assembly'
+        def protein_aligner_name = input_params.get('protein_aligner_name', []) ?: 'miniprot'
 
         if (params.verbose) {
             // dump all params as yaml
@@ -102,6 +104,11 @@ workflow egapx {
         setup_genome_params['annotation_provider'] = annotation_provider
         setup_genome_params['annotation_name_prefix'] = annotation_name_prefix
         (scaffolds, gencoll_asn, unpacked_genome, genome_asn, genome_asnb, eff_max_intron) = setup_genome(genome, organelles, setup_genome_params)
+        
+        // Winmask
+        winmask_plane (genome_asnb, scaffolds, gencoll_asn, [], [], [], task_params)  
+        win_softmask = winmask_plane.out.softmask
+        genome_blastdb = winmask_plane.out.blastdb
 
         // Protein alignments
         // def protein_alignments = []
@@ -111,7 +118,7 @@ workflow egapx {
         if (proteins) {
             // miniprot plane
             (unpacked_proteins, proteins_asn) = setup_proteins(proteins, task_params.get('setup', [:]))
-            target_proteins_plane(unpacked_genome, genome_asn, gencoll_asn, unpacked_proteins, proteins_asn, eff_max_intron, task_params)
+            target_proteins_plane(unpacked_genome, genome_asn, genome_blastdb, gencoll_asn, unpacked_proteins, proteins_asn, protein_aligner_name, eff_max_intron, task_params)
             protein_alignments = target_proteins_plane.out.protein_alignments
         }
 
@@ -147,10 +154,6 @@ workflow egapx {
             alignments = rnsp_alignments
         }
 
-        // Winmask
-        winmask_plane (genome_asnb, scaffolds, gencoll_asn, [], [], task_params)  
-        win_softmask = winmask_plane.out.softmask
-
         // GNOMON
 
         def gnomon_models = []
@@ -158,13 +161,24 @@ workflow egapx {
         gnomon_plane(genome_asn, scaffolds, gencoll_asn, proteins_asn, alignments, sra_exons, sra_exons_slices, proteins_trusted, tax_id, hmm_params, train_hmm, win_softmask, eff_max_intron, reference_sets, gnomon_filtering_scores_file, task_params) 
         gnomon_models = gnomon_plane.out.gnomon_models
 
+        def cmsearch_annots = []
+        if (params?.tasks?.trnascan?.enabled) {
+            cmsearch_plane(unpacked_genome)
+            cmsearch_annots = cmsearch_plane.out.cmsearch_annots
+        } else {
+            println("Note: trnascan plane is disabled in params.")
+        }
 
-        // TODO: enable and wire cmsearch_plane.out.cmsearch_annots into annot_builder
-        // cmsearch_plane(unpacked_genome)
+        def trnascan_annots = []
+        if (params?.tasks?.cmsearch?.enabled) {
+            trnascan_plane(unpacked_genome)
+            trnascan_annots = trnascan_plane.out.trnascan_annots
+        } else {
+            println("Note: cmsearch plane is disabled in params.")
+        }
 
         // outputs 
        
-        def accept_annot_file = []
         def gff_annotated_file = []
         def final_asn_out = []  
         def locus_out = []
@@ -172,14 +186,13 @@ workflow egapx {
         def annotated_genome_file = []
         def annotation_data_comment_file = []
 
-        annot_proc_plane(annotation_name_prefix, gnomon_models, gencoll_asn, genome_asn, genome_asnb,
+        annot_proc_plane(annotation_name_prefix, gnomon_models, cmsearch_annots, trnascan_annots, gencoll_asn, genome_asn, genome_asnb,
                          scaffolds, tax_id, symbol_format_class, name_cleanup_rules_file,
                          ortho_files, gnomon_plane.out.alignments, gnomon_plane.out.best_naming_hits, gnomon_plane.out.swiss_prot_asn, prot_denylist, task_params)
 
         locus_out = annot_proc_plane.out.locus
         locustypes = annot_proc_plane.out.locustypes
         final_asn_out = annot_proc_plane.out.final_asn_out
-        accept_annot_file = annot_proc_plane.out.accept_annot_file
         gff_annotated_file = annot_proc_plane.out.gff_annotated_file
         stats_dir = annot_proc_plane.out.stats
         annotated_genome_file = annot_proc_plane.out.annotated_genome_asn
@@ -203,7 +216,6 @@ workflow egapx {
         out_rna_fa = convert_annotations.out.transcripts_fasta
         out_cds_fa = convert_annotations.out.cds_fasta
         out_prot_fa = convert_annotations.out.proteins_fasta
-        annot_builder_output = annot_proc_plane.out.accept_annot_file
         locus = locus_out
         final_asn_outputs = final_asn_out
         validated = annot_proc_plane.out.validated
@@ -219,6 +231,6 @@ workflow egapx {
         
         busco_results = busco_out
         gnomon_biotype_contam_rpt = annot_proc_plane.out.gnomon_biotype_contam_rpt 
-
+        mask_stats = winmask_plane.out.mask_stats
         //converted_outs = converted_outs
 }

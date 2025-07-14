@@ -20,8 +20,6 @@ take:
         tasks:
             cmsearch:
                 num_batches: 16  # how many batches to split the genome into
-                cmsearch_wnode: -exclusive-threshold 100000
-                annot_merge: "-euk -unique"
     */
 
 main:    
@@ -29,7 +27,7 @@ main:
 
     // Parallelized into num_batches - can be 1 if running locally;
     // otherwise should be approx chromosome-sized sequences, e.g. 16 or 32,
-    // such that long-running jobs are split among different hosts.
+    // such that long-running jobs are split among different hosts
     def num_batches = params.tasks?.cmsearch?.num_batches ?: 1
 
     cmsearch_results = cmsearch_wnode(
@@ -61,7 +59,6 @@ output:
 script:
     """
     set -exuo pipefail
-
     mkdir -p out/
     zcat -f inp/fasta.fa | prime_cache -ifmt fasta -cache out/asn_cache -oseq-ids out/seqids.tsv
     """
@@ -70,6 +67,8 @@ script:
 // ----------------------------------------------------------------------------
 process cmsearch_wnode
 {
+    label 'huge_job'
+
     tag "${batch_id}" // NB: can only contain a number, otherwise egapx.py will crash in collect_logs()
                       // by incorrectly parsing task-name string that ends with a tag suffix.
     
@@ -106,12 +105,15 @@ script:
         --work-dir=./var                                                \\
         --out-file=out/${batch_id}.gpx-job.asnb                         \\
         cmsearch_wnode                                                  \\
+            -exclusive-threshold 1000000000                             \\
+            -cpus-per-worker 8                                          \\
+            -cmsearch-cpu 32                                            \\
             -cmsearch-path   \$(dirname \$(which cmsearch))             \\
             -model-path      inp/cmsearch_data/rfam1410.cm              \\
             -rfam-amendments inp/cmsearch_data/rfam1410_amendments.xml  \\
             -rfam-stockholm  inp/cmsearch_data/Rfam.seed                \\
             -rfam-version    14.10                                      \\
-            ${params.tasks?.cmsearch?.cmsearch_wnode ?: ''}             \\
+            -truncate_terminal_Ns                                       \\
     """
 /*
     Notes on parallelization aspects of cmsearch:
@@ -178,7 +180,7 @@ script:
 
     mkdir -p out
     gpx_qdump -input-path ./inp/gpx/ -sort-by job-id -unzip '*' |
-        annot_merge -asn-cache inp/asn_cache -output out/cmsearch.asnb ${params.tasks?.cmsearch?.annot_merge ?: ''}
+        annot_merge -asn-cache inp/asn_cache -output out/cmsearch.asnb -euk -unique
     """
 
 stub:

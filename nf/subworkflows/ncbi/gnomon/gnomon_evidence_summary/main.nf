@@ -210,7 +210,6 @@ process gnomon_report {
     output:
         path "output/*", emit: "output"
     script:
-        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     njobs=`wc -l <$jobs`
     if [ \$njobs -lt 16 ]; then
@@ -221,7 +220,7 @@ process gnomon_report {
     mkdir -p asncache
     prime_cache -cache ./asncache/ -ifmt asnb-seq-entry  -i ${gn_models} -oseq-ids spids1 -split-sequences
     prime_cache -cache ./asncache/ -ifmt asn-seq-entry  -i ${genome_asn} -oseq-ids spids2 -split-sequences
-    if [[ -e '${protein_asn}' ]]; then
+    if [[ -n "${protein_asn}" ]]; then
         if [[ `head -c4 ${protein_asn}` == "Seq-" ]]; then
             prime_cache -cache ./asncache/ -ifmt asn-seq-entry -i ${protein_asn} -oseq-ids spids3 -split-sequences
         else
@@ -245,23 +244,14 @@ process gnomon_report {
     mkdir -p tmp
     gnomon_report $params -nogenbank -egapx  -input-slices input_slices.mft -asn-cache ./asncache/  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -O interim
 
-    # When running multiple jobs on the cluster there is a chance that
-    # several jobs will run on the same node and thus generate files
-    # with the same filename. We need to avoid that to be able to stage
-    # the output files for gnomon_report. We add the job file numeric
-    # extension as a prefix to the filename.
     mkdir -p output
-    for f in interim/*; do
-        if [ -f \$f ]; then
-            mv \$f output/\${extension}_\$(basename \$f)
-        fi
-    done
+    cat interim/* > output/gnomon_report.${task.index}.gpx-job.asnb
+    rm -rf interim
     """
     stub:
-        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     mkdir -p output
-    touch output/gnomon_report.${job_num}.txt
+    touch output/gnomon_report.${task.index}.gpx-job.asnb
     """
 }
 

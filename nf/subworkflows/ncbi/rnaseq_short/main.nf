@@ -45,7 +45,14 @@ workflow rnaseq_short_plane {
         // Satisfy quirks of Nextflow compiler
         def reads_query1 = reads_query
         def reads_ids1 = reads_ids
-        def ch_reads = Channel.fromList(reads)
+        def ch_reads = []
+        try {
+            ch_reads = Channel.fromList(reads)
+        }
+        catch( Exception e ) {
+           ch_reads = reads
+        }
+
         star_bam_out = []
         // Conditional code on SRA reads source
         if (reads_query || reads_ids || reads) {

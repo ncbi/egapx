@@ -86,7 +86,6 @@ process annot {
     output:
         path "output/*"
     script:
-        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     njobs=`wc -l <$jobs`
     if [ \$njobs -lt 16 ]; then
@@ -118,17 +117,13 @@ process annot {
     mkdir -p interim
     annot_wnode $params -nogenbank -lds2 \$lds2  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -param $hmm_params -O interim || true
     mkdir -p output
-    for f in interim/*; do
-        if [ -f \$f ]; then
-            mv \$f output/\${extension}_\$(basename \$f)
-        fi
-    done
+    cat interim/* > output/annot_wnode.${task.index}.gpx-job.asnb
+    rm -rf interim
     """
     stub:
-        job_num = jobs.toString().tokenize('.').last().toInteger()
     """
     mkdir -p output
-    touch output/sample_gnomon_wnode.${job_num}.out
+    touch output/annot_wnode.${task.index}.gpx-job.asnb
     """
 }
 
