@@ -102,7 +102,6 @@ process run_chainer {
     output:
         path "output/*"
     script:
-        job_num = job.toString().tokenize('.').last().toInteger()
     """
     echo "${evidence_denylist.join('\n')}" > evidence_denylist.mft
     echo "${gap_fill_allowlist.join('\n')}" > gap_fill_allowlist.mft
@@ -116,26 +115,17 @@ process run_chainer {
     # make the local LDS of the genomic and protein (if present) sequences
     lds2_indexer -source indexed -db LDS2
 
-    # When running multiple jobs on the cluster there is a chance that
-    # several jobs will run on the same node and thus generate files
-    # with the same filename. We need to avoid that to be able to stage
-    # the output files for gpx_make_outputs. We add the job file numeric
-    # extension as a prefix to the filename.
     mkdir -p interim
     chainer_wnode $params -start-job-id \$start_job_id  -workers 32 -input-jobs ${job} -O interim -nogenbank -lds2 LDS2 -evidence-denylist-manifest evidence_denylist.mft -gap-fill-allowlist-manifest gap_fill_allowlist.mft -param ${hmm_params} -scaffolds-manifest scaffolds.mft -trusted-genes-manifest trusted_genes.mft
     mkdir -p output
-    for f in interim/*; do
-        if [ -f \$f ]; then
-            mv \$f output/\${extension}_\$(basename \$f)
-        fi
-    done
+    cat interim/* > output/chainer_wnode.${task.index}.gpx-job.asnb
+    rm -rf interim
     """
 
     stub:
-        job_num = job.toString().tokenize('.').last().toInteger()
     """
     mkdir -p output
-    touch output/sample_chainer_wnode.${job_num}.out
+    touch output/chainer_wnode.${task.index}.gpx-job.asnb
     """
 }
 

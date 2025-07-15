@@ -1,201 +1,152 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
 
-include { merge_params } from '../../utilities'
-
-// annot_builder_main collection_dir ${output}/COLLECTION accept_dir ${output}/ACCEPT conflict_dir ${output}/CONFLICT report_dir ${output}/REPORT test_dir ${output}/TEST i
-//                    reftrack_attrs_manifest ${input.reftrack_attrs} loss_pct_ccds 0.0 loss_pct_refseq_ref_primary 1.0 loss_pct_refseq_alt_ref_loci 100.0 loss_pct_refseq_patches 100.0 loss_pct_refseq_other 1.0
-// annot_builder_input name gnomon desc Gnomon aliases Gnomon|Chainer|PartAbInitio|FullAbInitio|Chainer_GapFilled|PartAbInitio_GapFilled 
-//                     is_primary 1 input_manifest ${input.gnomon_models} model_maker gnomon2model use_secondary_support 1 keep_top_N_models 50 
-//                     drop_alt_brs_overlap 1 merge_variants 1 enable_AR0050_AR0048 1 max_pct_ab_initio 50
-// annot_builder -accept-output both -asn-cache ${GP_cache_dir} -conffile ${conffile} -gc-assembly-manifest ${input.gencoll_asn} -logfile ${logfile}
-
-// not implimented, future examples
-//load_annot_builder_tracking_data -stats-xml ${output}/REPORT/stats.xml -taskrun ${taskrun.id}
-//annot_builder_input name bestrs desc BestRefSeq is_primary 1 input_manifest ${input.best_rs_seqalign} model_maker splign2model user_filter lxr_data.is_refseq=1
-//annot_builder_input name ng desc Curated Genomic is_primary 1 input_manifest ${input.best_ng_seqalign} model_maker ng2model score_filter rank=1 exclude_subtypes CloneRef,misc_difference,STS,tRNA,variation,VariationRef exclude_types Biosrc,Pub
-//annot_builder_input name imgt desc IMGT is_primary 1 input_manifest ${input.imgt} model_maker imgt2model use_secondary_support 0
-//annot_builder_input name rfam desc cmsearch aliases Rfam is_primary 1 input_manifest ${input.rfam} model_maker gnomon2model
-//annot_builder_input name trna desc tRNAscan-SE is_primary 1 input_manifest ${input.trna_annot} model_maker passthru
-//annot_builder_input name blessed desc SelectedGeneRepresentative is_primary 0 input_manifest ${input.best_rs_seqalign} model_maker splign2model score_filter rank=1 user_filter lxr_data.is_refseq=0
-
 workflow annot_builder {
     take:
         gencoll_asn
-        gnomon_file
         genome_asn
-        parameters  // Map : extra parameter and parameter update
+        gnomon_annots
+        cmsearch_annots
+        trna_annots
+        parameters
     main:
-
-        def m = annot_builder_main('outdir', params).collect() 
-        def i = annot_builder_input('outdir', m, '01', gnomon_file, params)
-        // FIXME: intended params 4-5 to be lists of all input files and all input manifests, but it complained with only one entry
-        def (all, accept, accept_ftable, annot) = annot_builder_run('outdir', i[0], gencoll_asn, i[1], gnomon_file, genome_asn, params)
+        annot_builder_run(gencoll_asn, genome_asn, gnomon_annots, cmsearch_annots, trna_annots)
     emit:
-        outputs = all
-        accept_asn = accept
-        accept_ftable_annot = accept_ftable
-        annot_files = annot
+        outputs             = annot_builder_run.out.all
+        accept_asn          = annot_builder_run.out.accept_asn
+        accept_ftable_annot = annot_builder_run.out.accept_ftable_annot
+        annot_files         = annot_builder_run.out.annot_files
 }
 
-
-// [Main]
-// accept_dir = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/out/ACCEPT"
-// collection_dir = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/out/COLLECTION"
-// conflict_dir = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/out/CONFLICT"
-// loss_pct_ccds = "0.0"
-// loss_pct_refseq_alt_ref_loci = "100.0"
-// loss_pct_refseq_other = "1.0"
-// loss_pct_refseq_patches = "100.0"
-// loss_pct_refseq_ref_primary = "1.0"
-// reftrack_attrs_manifest = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/inp/reftrack_attrs.mft"
-// report_dir = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/out/REPORT"
-// test_dir = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/out/TEST"
-
-process annot_builder_main {
-    input:
-        val outdir
-        val params
-    output:
-        path "annot_builder_main.ini"
-    script:
-    """
-    #!/usr/bin/env python3
-    with open('annot_builder_main.ini', 'w') as outf:
-        print('[Main]', file=outf)
-        print('accept_dir = "$outdir/ACCEPT"', file=outf)
-        print('collection_dir = "$outdir/COLLECTION"', file=outf)
-        print('conflict_dir = "$outdir/CONFLICT"', file=outf)
-        print('loss_pct_ccds = "0.0"', file=outf)
-        print('loss_pct_refseq_alt_ref_loci = "100.0"', file=outf)
-        print('loss_pct_refseq_other = "1.0"', file=outf)
-        print('loss_pct_refseq_patches = "100.0"', file=outf)
-        print('loss_pct_refseq_ref_primary = "1.0"', file=outf)
-        print('report_dir = "$outdir/REPORT"', file=outf)
-        print('test_dir = "$outdir/TEST"', file=outf)
-    """
-    stub:
-    """
-        touch annot_builder_main.ini
-        echo 'main' > annot_builder_main.ini
-    """
-}
-
-
-// [DataProvider06]
-// aliases = "Gnomon|Chainer|PartAbInitio|FullAbInitio|Chainer_GapFilled|PartAbInitio_GapFilled"
-// desc = "Gnomon"
-// drop_alt_brs_overlap = "1"
-// enable_AR0050_AR0048 = "1"
-// input_manifest = "/netmnt/vast01/gpi/prod/GPIPE_PROD/data00/Lagenorhynchus_albirostris/1.1.470794/6389647/annot_builder.46361542/inp/gnomon_models.mft"
-// is_primary = "1"
-// keep_top_N_models = "50"
-// max_pct_ab_initio = "50"
-// merge_variants = "1"
-// model_maker = "gnomon2model"
-// name = "gnomon"
-// use_secondary_support = "1"
-
-process annot_builder_input {
-    input:
-        val outdir
-        path prior_file
-        val provider_number
-        path input_file
-        val params
-    output:
-        path("annot_builder_input.ini") 
-        path("input_manifest_${provider_number}.mft")
-    script:
-    """
-    #!/usr/bin/env python3
-    with open('annot_builder_input.ini', 'w') as outf:
-
-        with open('${prior_file}', 'r') as f:
-            print(f.read(), file=outf)
-
-        print('[DataProvider${provider_number}]', file=outf)
-        
-        im = 'input_manifest_${provider_number}.mft'
-        inpf = '${input_file}'
-        with open(im, 'w') as mft:
-            print(inpf, file=mft)
-        print(f'input_manifest="{im}"', file=outf)
-
-        print('aliases = "Gnomon|Chainer|PartAbInitio|FullAbInitio|Chainer_GapFilled|PartAbInitio_GapFilled"', file=outf)
-        print('desc = "Gnomon"', file=outf)
-        print('name = "gnomon"', file=outf)
-        print('model_maker = "gnomon2model"', file=outf)
-
-        print('drop_alt_brs_overlap = "1"', file=outf)
-        print('enable_AR0050_AR0048 = "1"', file=outf)
-        print('is_primary = "1"', file=outf)
-        print('keep_top_N_models = "50"', file=outf)
-        print('max_pct_ab_initio = "50"', file=outf)
-        print('merge_variants = "1"', file=outf)
-        print('use_secondary_support = "1"', file=outf)
-    """
-    stub:
-    """
-        touch annot_builder_input.ini
-        touch input_manifest_${provider_number}.mft
-        cp ${prior_file} annot_builder_input.ini
-        echo 'input ${provider_number}' >> annot_builder_input.ini 
-    """
-}
-
-
-//    ## annot_builder -accept-output both -asn-cache ${GP_cache_dir} -conffile ${conffile} -gc-assembly-manifest ${input.gencoll_asn} -logfile ${logfile}
 process annot_builder_run {
     input:
-        val outdir
-        path conffile, stageAs: 'annot_builder_final.ini'
-        path gencoll_asn
-        path input_manifests
-        path input_files
-        path genome_asn, stageAs: 'genome/*'
-        val params
+        path gencoll_asn,     name: 'inp/*'
+        path genome_asn,      name: 'inp/*'
+        path gnomon_annots,   name: 'inp/*'
+        path cmsearch_annots, name: 'inp/*'
+        path trna_annots,     name: 'inp/*'
     output:
-        path "${outdir}/*", emit: "all"
-        path "${outdir}/ACCEPT/accept.asn", emit: "accept"//, optional: true
-        path "${outdir}/ACCEPT/accept.ftable_annot", emit: "accept_ftable_annot"//, optional: true
-        path "${outdir}/ACCEPT/*.annot"//, optional: true
+        path "out/*", emit: "all"
+        path "out/ACCEPT/accept.asn", emit: "accept_asn" //, optional: true
+        path "out/ACCEPT/accept.ftable_annot", emit: "accept_ftable_annot"//, optional: true
+        path "out/ACCEPT/*.annot", emit: "annot_files" //, optional: true
     script:
     """
-    mkdir -p $outdir/ACCEPT
-    mkdir -p $outdir/COLLECTION
-    mkdir -p $outdir/CONFLICT
-    mkdir -p $outdir/REPORT
-    mkdir -p $outdir/TEST
+    set -exuo pipefail
 
+    # Prepare config-file.
+    mkdir -p inp
+    cat > inp/annot_builder.ini << \\
+    ---------------------------------------------------------------------------
+    [Main]
+    accept_dir = "out/ACCEPT"
+    collection_dir = "out/COLLECTION"
+    conflict_dir = "out/CONFLICT"
+    loss_pct_ccds = "0.0"
+    loss_pct_refseq_alt_ref_loci = "100.0"
+    loss_pct_refseq_other = "1.0"
+    loss_pct_refseq_patches = "100.0"
+    loss_pct_refseq_ref_primary = "1.0"
+    report_dir = "out/REPORT"
+    test_dir = "out/TEST"
+
+    ---------------------------------------------------------------------------
+
+    # Append GNOMON-config if present.
+
+    # Note: a reasonable thing to do would be to unconditionally create 
+    # the config file with all possible DataProviders, and simply specify
+    # empty `input_manifest` files when those inputs are not connected,
+    # which works, but it will emit all data-provider names into the output ASN.1,
+    # including the ones that are not connected.
+    #
+    # Hence we'll need to conditionally populate the config instead.
+
+    if [[ -n "$gnomon_annots" ]]; then
+        ls $gnomon_annots > inp/gnomon_annots.mft
+
+        cat >> inp/annot_builder.ini << \\
+    ---------------------------------------------------------------------------
+    [DataProvider01]
+    input_manifest = "inp/gnomon_annots.mft" 
+    aliases = "Gnomon|Chainer|PartAbInitio|FullAbInitio|Chainer_GapFilled|PartAbInitio_GapFilled"
+    desc = "Gnomon"
+    name = "gnomon"
+    model_maker = "gnomon2model"
+    drop_alt_brs_overlap = "1"
+    enable_AR0050_AR0048 = "1"
+    is_primary = "1"
+    keep_top_N_models = "50"
+    max_pct_ab_initio = "50"
+    merge_variants = "1"
+    use_secondary_support = "1"
+
+    ---------------------------------------------------------------------------
+    fi
+
+    # Append cmsearch-config if present
+    if [[ -n "$cmsearch_annots" ]]; then
+        ls $cmsearch_annots > inp/cmsearch_annots.mft
+
+        cat >> inp/annot_builder.ini << \\
+    ---------------------------------------------------------------------------
+    [DataProvider02]
+    aliases = "Rfam"
+    desc = "cmsearch"
+    input_manifest = "inp/cmsearch_annots.mft"
+    is_primary = "1"
+    model_maker = "gnomon2model"
+    name = "rfam"
+
+    ---------------------------------------------------------------------------
+    fi
+
+    # Append tRNA-config if present
+    if [[ -n "$trna_annots" ]]; then
+        ls $trna_annots > inp/trna_annots.mft
+
+        cat >> inp/annot_builder.ini << \\
+    ---------------------------------------------------------------------------
+    [DataProvider03]
+    desc = "tRNAscan-SE"
+    input_manifest = "inp/trna_annots.mft"
+    is_primary = "1"
+    model_maker = "passthru"
+    name = "trna"
+
+    ---------------------------------------------------------------------------
+    fi
+
+
+    mkdir -p out/{ACCEPT,COLLECTION,CONFLICT,REPORT,TEST}
+    
     mkdir -p asncache
-    prime_cache -cache ./asncache/ -ifmt asn-seq-entry  -i $genome_asn  -oseq-ids genome_ids -split-sequences
+    prime_cache -cache ./asncache/ -ifmt asn-seq-entry -i $genome_asn -split-sequences
 
-    ## lds2_indexer -source genome/ -db LDS2
-    # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
-    echo "printing annot_builder -version"
     annot_builder -version
-    ## annot_builder -accept-output both -nogenbank -lds2 LDS2 -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
-    annot_builder -accept-output both -nogenbank -asn-cache ./asncache/ -conffile $conffile -gc-assembly $gencoll_asn -logfile ${outdir}/annot_builder.log
-    cat ${outdir}/ACCEPT/*.ftable.annot > ${outdir}/ACCEPT/accept.ftable_annot
+    annot_builder -accept-output both -nogenbank -asn-cache ./asncache/ -conffile inp/annot_builder.ini -gc-assembly $gencoll_asn -logfile out/annot_builder.log
+    
+    # NB: don't do this because if there are many files (aberrant assembly with many scaffolds),
+    # *-expansion will exceed maximum command-line length. Instead, use find with -exec.
+    # cat out/ACCEPT/*.ftable.annot > out/ACCEPT/accept.ftable_annot
+
+    find out/ACCEPT -type f -name '*.ftable.annot' -exec cat {} + > out/ACCEPT/accept.ftable_annot
+
+
+    rm -rf ./asncache
     """
+
     stub:
     """
-    mkdir -p $outdir/ACCEPT
-    mkdir -p $outdir/COLLECTION
-    mkdir -p $outdir/CONFLICT
-    mkdir -p $outdir/REPORT
-    mkdir -p $outdir/TEST
+    mkdir -p out/{ACCEPT,COLLECTION,CONFLICT,REPORT,TEST}
     
-    echo "1" > ${outdir}/annot_builder.log
-    echo "2" > ${outdir}/accept.asn
-    echo "3" > ${outdir}/accept.ftable.annot
+    echo "1" > out/annot_builder.log
+    echo "2" > out/accept.asn
+    echo "3" > out/accept.ftable.annot
     
-
-    echo "4" > ${outdir}/ACCEPT/accept.asn
-    echo "5" > ${outdir}/ACCEPT/accept.ftable_annot
-    echo "S1" > ${outdir}/ACCEPT/S1.annot
-    echo "S2" > ${outdir}/ACCEPT/S2.annot
-
+    echo "4" > out/ACCEPT/accept.asn
+    echo "5" > out/ACCEPT/accept.ftable_annot
+    echo "S1" > out/ACCEPT/S1.annot
+    echo "S2" > out/ACCEPT/S2.annot
     """
 }

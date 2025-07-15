@@ -58,17 +58,20 @@ Authors:  Sean R. Eddy
 License:  BSD License
           [https://github.com/EddyRivasLab/infernal/blob/master/LICENSE]
 
+Location: /img/gp/third-party/tRNAscan-SE
+Authors:  Patricia P. Chan, Brian Lin, and Todd M. Lowe
+License:  GPL-3.0
+          [https://github.com/EddyRivasLab/infernal/blob/master/LICENSE]
+
 Location: /img/gp/third-party/hmmer
 Authors:  Sean R. Eddy
 License:  BSD License
           [https://github.com/EddyRivasLab/hmmer/blob/master/LICENSE]
 
-
 Location: /usr/local/bin/busco
 Authors:  Evgeny Zdobnov
 License:  MIT License
           [https://gitlab.com/ezlab/busco/-/blob/master/LICENSE]
-
 
 Location: /img/gp/third-party/minimap2
 Authors:  Heng Li

@@ -16,7 +16,6 @@ process export {
         path transcript_fasta
         path cds_fasta
         path proteins_fasta
-        path annot_builder_output, stageAs: 'annot_builder_output/*'
         path validated, stageAs: 'validated/*'
         path stats, stageAs: 'stats/*'
         path annotated_genome_asn
@@ -27,6 +26,7 @@ process export {
         path user_gnomon_report, stageAs: 'GNOMON/*'
         path user_gnomon_quality_report, stageAs: 'GNOMON/*'
         path gnomon_summaries, stageAs: 'GNOMON/*'
+        path mask_stats, stageAs: 'stats/*'
         // path locus
     output:
         path "*", includeInputs: true
@@ -52,7 +52,6 @@ workflow {
            egapx.out.out_rna_fa,
            egapx.out.out_cds_fa,
            egapx.out.out_prot_fa,
-           egapx.out.annot_builder_output,
            egapx.out.validated,
            egapx.out.stats,
            egapx.out.annotated_genome_asn,
@@ -62,5 +61,6 @@ workflow {
            egapx.out.gnomon_biotype_contam_rpt,
            egapx.out.user_gnomon_report,
            egapx.out.user_gnomon_quality_report,
-           egapx.out.gnomon_summaries)
+           egapx.out.gnomon_summaries,
+           egapx.out.mask_stats)
 }

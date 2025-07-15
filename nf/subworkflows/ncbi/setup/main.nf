@@ -77,7 +77,7 @@ process get_genome_info {
     
     first_char=""
     if [[ ${need_zcat} == true ]]; then
-        first_char=`zcat $input_genome_file | head -c 1`
+        first_char=`zcat $input_genome_file | head -c 1 || true`
     else
         first_char=`head -c 1 $input_genome_file`
     fi
@@ -242,5 +242,57 @@ process convert_proteins {
     touch $out_fasta
     touch $proteins_asn
     touch $proteins_asnb
+    """
+}
+
+
+workflow setup_long_reads {
+    take:
+        reads
+        srr_id
+    main:
+        rename_fasta_ids(reads, srr_id)
+    emit:
+        renamed_reads = rename_fasta_ids.out
+}
+
+
+process rename_fasta_ids {
+    input:
+        tuple val(sampleID), path(fastx, stageAs: "reads/*")
+        val  srr_id
+    output:
+        tuple val(sampleID),  path ('output/*')  , emit: 'fasta_pair_list'
+    script:
+        file_name = fastx.getBaseName() + '.fasta'
+    """
+    #!/usr/bin/env python3
+    import os
+    os.makedirs('output', exist_ok=True)
+    with open('${fastx}', 'r') as infile, open('output/${file_name}', 'w') as outfile:
+        rec_cnt = 1
+        skip_next = False
+        for line in infile:
+            line = line.lstrip()
+            if not line:
+                continue
+            if line[0] in {'>', '@', '+'}:
+                new_id = f"gnl|SRA|SRR{${srr_id}:08d}.{rec_cnt}.1"
+                if line[0] in {'>', '@'}:
+                    outfile.write(f">{new_id}{os.linesep}")
+                if line[0] in {'>', '+'}:
+                    rec_cnt += 1
+                if line[0] == '+':
+                    skip_next = True
+            elif skip_next:
+                skip_next = False
+            else:
+                outfile.write(line)
+    """
+    stub:
+        file_name = fastx.getBaseName() + '.fasta'
+    """
+    mkdir -p output
+    echo $srr_id > output/$file_name
     """
 }

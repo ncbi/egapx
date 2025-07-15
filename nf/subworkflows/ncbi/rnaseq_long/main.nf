@@ -6,6 +6,9 @@ nextflow.enable.dsl=2
 
 params.import_prefix = "../../../../nf/subworkflows/ncbi/" // redirected during testing
 
+// this process doesnt exist under test
+//include { rename_fasta_ids } from "./${params.import_prefix}/setup/main"
+include { rename_fasta_ids } from "./../setup/main"
 include { sra_query } from "./${params.import_prefix}rnaseq_short/sra_qry/main"
 include { fetch_sra_fasta } from "./${params.import_prefix}rnaseq_short/fetch_sra_fasta/main"
 include { minimap2_index } from "./${params.import_prefix}rnaseq_long/minimap2_index/main"
@@ -23,7 +26,7 @@ workflow rnaseq_long_plane {
         // reads, reads_metadata - path to reads accompanied by metadata
         reads_query     // SRA query
         reads_ids       // list of SRA IDs
-        reads           // path to reads
+        reads           // reads files formatted as fromFilePairs - (list of) tuple(s) [ run_name, [ first_read_file, second_read_file ]]
         max_intron      // max intron length
         task_params     // task parameters for every task
     main:
@@ -40,7 +43,8 @@ workflow rnaseq_long_plane {
             def reads_fasta_pairs = fetch_sra_fasta(sra_run_list, task_params.get('fetch_sra_fasta', [:]))
             minimap2(genome_fasta, genome_index, gencoll, reads_fasta_pairs, max_intron, task_params.get('minimap2_wnode', [:]))
         } else if (ch_reads) {
-            minimap2(genome_fasta, genome_index, gencoll, ch_reads, max_intron, task_params.get('minimap2_wnode', [:]))
+            def renamed_reads = rename_fasta_ids(ch_reads, Channel.from(1..reads.size()))
+            minimap2(genome_fasta, genome_index, gencoll, renamed_reads, max_intron, task_params.get('minimap2_wnode', [:]))
         } else {
             minimap2(genome_fasta, genome_index, gencoll, reads, max_intron, task_params.get('minimap2_wnode ', [:]))
         }

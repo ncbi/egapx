@@ -44,8 +44,9 @@ process run_protein_filter_replacement {
     prime_cache -cache ./asncache/ -ifmt asnb-seq-entry  -i ${swiss_prot_asn} -oseq-ids /dev/null -split-sequences
 
     mkdir -p ./output
+    align_sort $align_sort_params  -asn-cache ./asncache  -i ./input_alignments.asnb -o output/best_protein_hits.asnb
 
-    align_filter $align_filter_params -asn-cache ./asncache  -i ./input_alignments.asnb -o - | align_sort -i - $align_sort_params -asn-cache ./asncache  -o - | align_pack -ifmt seq-align -i - -ofmt seq-align-set -o ./output/best_protein_hits.asnb 
+    #align_filter $align_filter_params -asn-cache ./asncache  -i ./input_alignments.asnb -o - | align_sort -i - $align_sort_params -asn-cache ./asncache  -o - | align_pack -ifmt seq-align -i - -ofmt seq-align-set -o ./output/best_protein_hits.asnb 
     ##align_filter $align_filter_params -asn-cache ./asncache  -i ./input_alignments.asnb -o ./t1.asnb 
     ##align_sort -i ./t1.asnb $align_sort_params -asn-cache ./asncache  -o ./t2.asnb     
     ##align_pack -ifmt seq-align -i ./t2.asnb -ofmt seq-align-set -o ./t3.asnb

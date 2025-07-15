@@ -70,10 +70,11 @@ process split_proteins {
     stub:
     print("items_per_chunk ${items_per_chunk}")
     """
+    # NB: see GP-40504
     mkdir -p output
-    touch output/1.fa
-    touch output/2.fa
-    touch output/3.fa
+    echo 1 > output/1.fa
+    echo 2 > output/2.fa
+    echo 3 > output/3.fa
     """
 }
 
@@ -97,12 +98,13 @@ process run_miniprot {
     mkdir -p output
     miniprot ${effective_params}  ${fasta_genome_file} ${fasta_proteins_file} > output/${paf_name}
     """
+
     stub:
         def paf_name = fasta_proteins_file.baseName.toString() + ".paf"
         def effective_params = get_effective_params(parameters, max_intron)
         println("Miniprot params: ${effective_params}")
     """
     mkdir -p output
-    touch output/${paf_name}
+    echo ${task.index} > output/${paf_name}
     """
 }

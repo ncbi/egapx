@@ -96,27 +96,18 @@ process run_rnaseq_collapse {
     # make the local LDS of the genomic sequences
     lds2_indexer -source ./genome -db ./genome_lds  
   
-    # When running multiple jobs on the cluster there is a chance that
-    # several jobs will run on the same node and thus generate files
-    # with the same filename. We need to avoid that to be able to stage
-    # the output files for gpx_make_outputs. We add the job file numeric
-    # extension as a prefix to the filename.
     mkdir -p interim
     rnaseq_collapse $params -O interim -nogenbank -lds2 ./genome_lds -sorted-vols align.mft -scaffold-list scaffold_list.mft -sra-metadata-manifest metadata.mft -start-job-id \$start_job_id -input-jobs $job -workers \$threads
+
     mkdir -p output
-    for f in interim/*; do
-        if [ -f \$f ]; then
-            mv \$f output/\${extension}_\$(basename \$f)
-        fi
-    done
+    cat interim/* > output/rnaseq_collapse.${task.index}.gpx-job.asnb
+    rm -rf interim
     """
     
     stub:
     """
-    filename=\$(basename -- "$job")
-    extension="\${filename##*.}"
     mkdir -p output
-    touch output/rnaseq_collapse_wnode.\${extension}.out
+    touch output/rnaseq_collapse.${task.index}.gpx-job.asnb
     """
 
 }

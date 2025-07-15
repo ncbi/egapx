@@ -51,6 +51,7 @@ tasks:
       50 --genomeLoad NoSharedMemory --outSAMtype SAM --outSAMattributes 'NH HI AS
       nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
       50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None
+      --runRNGseed 777 --outMultimapperOrder Old_2.4 --outSAMorder PairedKeepInputOrder
   miniprot:
     split_proteins: -n 25000
     miniprot: -t 31 -p 0.4 --outs=0.4
@@ -99,7 +100,7 @@ tasks:
     extract_products: ''
   best_protein_hits:
     align_filter: -filter 'pct_coverage >= 50'
-    align_sort: -k query,-bit_score,slen,-align_length -group 1 -top 1
+    align_sort: -filter 'pct_coverage >= 50' -group 1 -ifmt seq-align-set -k query,-bit_score,slen,-align_length -ofmt seq-align-set -top 1
   annot_builder:
     annot_builder: ''
   annotwriter:
@@ -129,6 +130,30 @@ tasks:
   gc_makeblastdb:
     gc_makeblastdb: ''
   cmsearch:
+    enabled: false
     num_batches: 16
+  trnascan:
+    enabled: false
     cmsearch_wnode: -exclusive-threshold 100000
     annot_merge: -euk -unique
+  prosplign_wnode:
+    gpx_qsubmit: -NxM-threshold 10000 -affinity subject 
+    prosplign_wnode: -backlog 1 -compartment_penalty 0.5 -cut_flank_partial_codons true -fill_holes false -flank_positives 55 
+      -frameshift_opening 30 -gap_extension 1 -gap_opening 10 -intron_AT 25 -intron_GC 20 -intron_GT 15 -intron_non_consensus 34 -inverted_intron_extension 1000
+      -max_bad_len 45 -max_extent 10000 -maximize coverage -min_compartment_idty 0.5 -min_exon_ident 30 -min_exon_positives 55 
+      -min_flanking_exon_len 15 -min_good_len 59 -min_intron_len 30 -min_positives 15 -min_singleton_idty 0.65 -start_bonus 8 
+      -stop_bonus 8 -total_positives 70
+    gpx_qdump: -unzip '*' 
+  prosplign_prepare:
+    prosplign_compart:  -compartment_penalty 0.5 -max_extent 10000 -maximize coverage -min_compartment_idty 0.5 -min_singleton_idty 0.65 -prosplign-gaps
+    prosplign_compart_filter: -max_compart_count 25 -min_prot_coverage 0.35 -sufficient_compart_length -1
+  tblastn_align:
+    gpx_make_outputs: -unzip '*'
+    gpx_qsubmit:  -max-batch-length 10000  -affinity subject 
+    tblastn_wnode: -comp_based_stats 0  -evalue 0.001 -matrix BLOSUM80 -seg yes -soft_masking true -threshold 18 -word_size 6 -db_soft_mask 'NCBI-GPipe-Softmask'
+  tblastn_screen:
+    gpx_make_outputs: -unzip '*'
+    gpx_qsubmit: -batch-size 1
+    tblastn_wnode: -best_hit_overhang 0.1 -best_hit_score_edge 0.1 -comp_based_stats 0 -delay 0 -evalue 0.001 -matrix BLOSUM80 -seg yes -soft_masking true -threshold 12
+  mask_assm_stats:
+    mask_assm_stats: ''

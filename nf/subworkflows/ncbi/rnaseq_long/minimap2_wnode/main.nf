@@ -141,6 +141,7 @@ process gpx_qsubmit {
 
 
 process minimap2_wnode {
+    maxForks 50
     label 'long_job'
     input:
         path genome_fasta, stageAs: "genome/*"
@@ -152,7 +153,6 @@ process minimap2_wnode {
     output:
         path "alignments/*", emit: "alignments"
     script:
-        job_num = job.toString().tokenize('.').last().toInteger()
         String minimap2_params = merge_params("", parameters, "minimap2-params")
         String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2_wnode") + ' -minimap2-params "' + minimap2_params + '"'
     """
@@ -162,20 +162,16 @@ process minimap2_wnode {
     prime_cache -cache asncache/ -ifmt fasta -i genome/* -split-sequences
     minimap2_wnode -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id $start_job_id -input-jobs $job -nogenbank -lds2 $reads_LDS -asn-cache asncache -gc $gencoll -work-area tmp -O interim $minimap2_wnode_params
     mkdir -p alignments
-    for f in interim/*; do
-        if [ -f \$f ]; then
-            mv \$f alignments/${sampleID}_${job_num}_\$(basename \$f)
-        fi
-    done
+    cat interim/* > alignments/minimap2_wnode.${task.index}.gpx-job.asnb
+    rm -rf interim
     """
     stub:
-        job_num = job.toString().tokenize('.').last().toInteger()
         String minimap2_params = merge_params("", parameters, "minimap2-params")
         String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2_wnode") + ' -minimap2-params "' + minimap2_params + '"'
         println("Effective minimap2_wnode parameters: $minimap2_wnode_params")
     """
     mkdir -p alignments
-    touch alignments/${sampleID}_${job_num}.sam
+    touch alignments/minimap2_wnode.${task.index}.gpx-job.asnb
     """
 }
 
