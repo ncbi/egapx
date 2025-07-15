@@ -571,8 +571,6 @@ max_intron: 700000
 ## Submitting EGAPx annotation to NCBI
 [Back to Top](#Contents)
 
-:warning: The current EGAPx release (0.4.0) will produce submission files, however they are not yet GenBank submission-compliant. A subsequent patch release (likely 0.4.1) will produce GenBank-compliant files. We welcome users to try the process below to produce submission files and create a GitHub issue with errors or questions.
-
 After annotating your genome with EGAPx, you can prepare your annotation for submission to NCBI.
 
 ### Prepare required files and metadata
