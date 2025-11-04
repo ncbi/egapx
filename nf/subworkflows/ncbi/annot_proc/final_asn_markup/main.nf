@@ -39,6 +39,7 @@ include { merge_params } from '../../utilities'
 
 workflow final_asn_markup {
     take:
+        assembly_name
         gencoll_asn
         genome_asn
         scaffolds // asn seqentrs
@@ -50,7 +51,7 @@ workflow final_asn_markup {
     main:
         params = merge_params("", parameters, 'final_asn')
 
-        final_asn(gencoll_asn, genome_asn, scaffolds, chromosomes, annots, locus_link, locustypes, params)
+        final_asn(assembly_name, gencoll_asn, genome_asn, scaffolds, chromosomes, annots, locus_link, locustypes, params)
 
     emit:
         outputs = final_asn.out.all
@@ -64,6 +65,7 @@ workflow final_asn_markup {
 
 process final_asn {
     input:
+        val assembly_name
         path gencoll_asn, stageAs: 'gencoll.asn'
         path genome_asn, stageAs: 'genome/*'
         path scaffolds, stageAs: 'scaffolds' // asn seqentry
@@ -74,8 +76,8 @@ process final_asn {
         val params
     output:
         path "output/*", emit: "all"
-        path "output/scaf/EGAPx_Test_Assembly/*.asn", emit: "to_convert"
-        path "output/val/EGAPx_Test_Assembly/*", emit: "validated"
+        path "output/scaf/${assembly_name}/*.asn", emit: "to_convert"
+        path "output/val/${assembly_name}/*", emit: "validated"
         path "output/stats/*", emit: "stats"
         path "output/annotated_genome.asn", emit: "annotated_genome_asn"
         path "output/annotation_data.cmt", emit: "annotation_data_comment"
@@ -83,13 +85,13 @@ process final_asn {
     """
     mkdir -p output
     mkdir -p asncache
-    mkdir -p 'EGAPx_Test_Assembly'
+    mkdir -p '${assembly_name}'
 
     prime_cache -cache ./asncache/ -ifmt asn-seq-entry  -i $genome_asn  -oseq-ids cached_ids  -split-sequences
-    concat_seqentries -cache ./asncache/ -o "./EGAPx_Test_Assembly/genome.asnb.gz"
-    asn_translator -gzip -i "./EGAPx_Test_Assembly/genome.asnb.gz"  -o "./EGAPx_Test_Assembly/genome.asnt" 
+    concat_seqentries -cache ./asncache/ -o "./${assembly_name}/genome.asnb.gz"
+    asn_translator -gzip -i "./${assembly_name}/genome.asnb.gz"  -o "./${assembly_name}/genome.asnt" 
 
-    echo "./EGAPx_Test_Assembly/genome.asnt" > ./scaffold.mft
+    echo "./${assembly_name}/genome.asnt" > ./scaffold.mft
     touch ./chromosome.mft
     ls -1 annots/* > ./annots.mft
     echo $locus_link > ./locus_link.mft
@@ -108,27 +110,27 @@ process final_asn {
         -S NONE -genbank-mode -out_dir  ./output/
 
     mkdir -p raw/scaf
-    mv ./output/scaf/EGAPx_Test_Assembly/*.asn ./raw/scaf
+    mv ./output/scaf/${assembly_name}/*.asn ./raw/scaf
     for f in ./raw/scaf/*.asn; do
-        of=./output/scaf/EGAPx_Test_Assembly/`basename \$f`
+        of=./output/scaf/${assembly_name}/`basename \$f`
         asn_cleanup -basic -i \$f -o \$of
         cat \$of >> output/annotated_genome.asn
     done
 
     # NB if (when) chromosomes is not empty the same logic should be applied to chrom directroies
-    if [ -s ./output/chrom/EGAPx_Test_Assembly/*.asn ]; then
+    if [ -s ./output/chrom/${assembly_name}/*.asn ]; then
         mkdir -p raw/chrom
-        mv ./output/chrom/EGAPx_Test_Assembly/*.asn ./raw/chrom
+        mv ./output/chrom/${assembly_name}/*.asn ./raw/chrom
         for f in ./raw/chrom/*.asn; do
-            of=./output/chrom/EGAPx_Test_Assembly/`basename \$f`
+            of=./output/chrom/${assembly_name}/`basename \$f`
             asn_cleanup -basic -i \$f -o \$of
             cat \$of >> output/annotated_genome.asn
         done
     fi
 
-    mkdir -p output/val/EGAPx_Test_Assembly
-    for f in ./output/scaf/EGAPx_Test_Assembly/*.asn; do
-        asnvalidate -Q 0 -asn-cache ./asncache/ -v 4 -A -X -Z -o ./output/val/EGAPx_Test_Assembly/`basename \$f .asn`.val -i \$f
+    mkdir -p output/val/${assembly_name}
+    for f in ./output/scaf/${assembly_name}/*.asn; do
+        asnvalidate -Q 0 -asn-cache ./asncache/ -v 4 -A -X -Z -o ./output/val/${assembly_name}/`basename \$f .asn`.val -i \$f
     done
 
     # joint manifest is scaffolds, chromosomes, and organelles (not implemented here)
@@ -142,10 +144,10 @@ process final_asn {
     """
     mkdir -p output/ACCEPT
     echo "1" > output/ACCEPT/something.asn
-    mkdir -p output/scaf/EGAPx_Test_Assembly/
-    echo "1" > output/scaf/EGAPx_Test_Assembly/genome.asn
-    mkdir -p output/val/EGAPx_Test_Assembly/
-    echo "1" > output/val/EGAPx_Test_Assembly/genome.val
+    mkdir -p output/scaf/${assembly_name}/
+    echo "1" > output/scaf/${assembly_name}/genome.asn
+    mkdir -p output/val/${assembly_name}/
+    echo "1" > output/val/${assembly_name}/genome.val
     mkdir -p output/stats
     echo "1" > output/stats/feature_counts.txt
     echo "1" > output/annotated_genome.asn

@@ -43,6 +43,7 @@ process fetch_swiss_prot_asn  {
 }
 
 process get_swiss_prot_ids {
+    label 'sqlite3'
     input:
         path swiss_prot_asn
     output:
@@ -87,7 +88,7 @@ process run_diamond_egap {
     mkdir -p ./work
 
     echo  ${params}
-    echo "${gnomon_prot_ids.join('\n')}" > query.mft
+    echo "${gnomon_prot_ids.join('\\n')}" > query.mft
     diamond_egap  ${params} -asn-cache ./asncache/ -nogenbank -query-manifest query.mft -subject ${swiss_prot_ids} \
         -output-dir ./output/ -work-area ./work/  -diamond-executable \${diamond_bin}
     rm -rf ./work

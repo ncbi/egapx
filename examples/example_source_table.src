@@ -1,0 +1,7 @@
+SeqID	chromosome	location 	topology
+contig_Chr1	1	chromosome	
+contig_Chr2	2	chromosome	
+contig_Chr3	3	chromosome	
+contig_997		mitochondrion	circular
+contig_998		chloroplast	circular
+contig_999		plastid	circular

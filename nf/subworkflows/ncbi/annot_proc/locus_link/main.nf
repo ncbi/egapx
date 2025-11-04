@@ -16,6 +16,7 @@ workflow locus_link {
         curr_prev_compare
         gnomon_biotypes
         lxr_data
+        name_cleanup_rules_file
         proteins_asn
         name_from_ortholog
         parameters  // Map : extra parameter and parameter update
@@ -24,7 +25,7 @@ workflow locus_link {
         effective_params = merge_params(default_params, parameters, 'locus_type')
         run_locus_link(best_refseq_prot_hit, orthologs, annotation, 
                  gencoll_asn, gnomon_lds2_source, best_prot_hit, track_loci, comparisons,  curr_prev_compare,  
-                 gnomon_biotypes, lxr_data, proteins_asn, name_from_ortholog,  default_params)
+                 gnomon_biotypes, lxr_data, name_cleanup_rules_file, proteins_asn, name_from_ortholog,  default_params)
     emit:
         best_gnomon_prot_hit = run_locus_link.out.best_gnomon_prot_hit
         best_refseq_prot_hit = run_locus_link.out.best_refseq_prot_hit
@@ -49,6 +50,7 @@ process run_locus_link {
         path curr_prev_compare
         path gnomon_biotypes
         path lxr_data, stageAs: 'lxr_tracking_data.txt'
+        path name_cleanup_rules_file, stageAs: 'name_cleanup_rules_file.txt'
         path proteins_asn
         path name_from_ortholog
         val parameters
@@ -79,7 +81,7 @@ process run_locus_link {
     str="\$str -locus_track $track_loci"
     str="\$str -name_from_ortholog_rpt $name_from_ortholog"
 
-    locus_type  -asn-cache ./asncache/ -lds2 ./LDS2 -nogenbank -no_acc_reserve  -annots annotation.mft -gc $gencoll_asn -gnomon_biotype $gnomon_biotypes -o_stats output/stats.xml -o_locustypes output/locustypes.tsv -o_locus_lnk output/locus.lnk  -annotcmp comparisons.mft  -annotcmp_pb curr_prev_compare.mft \$str
+    locus_type  -asn-cache ./asncache/ -lds2 ./LDS2 -nogenbank -no_acc_reserve -name_cleanup_rules_file $name_cleanup_rules_file  -annots annotation.mft -gc $gencoll_asn -gnomon_biotype $gnomon_biotypes -o_stats output/stats.xml -o_locustypes output/locustypes.tsv -o_locus_lnk output/locus.lnk  -annotcmp comparisons.mft  -annotcmp_pb curr_prev_compare.mft \$str
     """
     stub:
     """

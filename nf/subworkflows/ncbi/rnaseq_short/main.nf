@@ -45,7 +45,15 @@ workflow rnaseq_short_plane {
         // Satisfy quirks of Nextflow compiler
         def reads_query1 = reads_query
         def reads_ids1 = reads_ids
-        def ch_reads = Channel.fromList(reads)
+        def ch_reads = []
+        try {
+            ch_reads = Channel.fromList(reads)
+        }
+        catch( Exception e ) {
+           ch_reads = reads
+        }
+
+        star_bam_out = []
         // Conditional code on SRA reads source
         if (reads_query || reads_ids || reads) {
             def index = star_index(unpacked_genome_fasta, task_params.get('star_index', [:]))
@@ -72,14 +80,17 @@ workflow rnaseq_short_plane {
             def bam_bins = bam_bin_and_sort.out.sorted
 
             // Run BAM2ASN
-            bam2asn(bam_bins, strandedness, genome_asn, task_params.get('convert_from_bam', [:]))
+            bam2asn(bam_bins, strandedness, genome_asn, sra_metadata, task_params.get('convert_from_bam', [:]))
             def asn_align = bam2asn.out.align.collect()
             def keylist = bam2asn.out.keylist.collect()
 
             rnaseq_collapse(genome_asn, keylist, asn_align, sra_metadata, 10, task_params.get('rnaseq_collapse', [:]))
+            star_bam_out = ch_align
         }
         
     emit:
-        rnaseq_alignments = rnaseq_collapse.out.alignments
-        bam_alignments = star.out.align 
+        rnaseq_alignments = rnaseq_collapse.out.alignments 
+        sra_exons = rnaseq_collapse.out.exons
+        sra_exons_slices = rnaseq_collapse.out.exons_slices
+        star_bam = star_bam_out 
 }

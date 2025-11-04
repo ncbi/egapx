@@ -70,6 +70,19 @@ process run_star {
     fastq=\$(which fasterq-dump)
     ${seqkit_cmd};
     star_wnode ${effective_params} -input-jobs jobfile -genome-sequences-manifest seqid_list.mft -fastq-executable \$fastq  -samtools-executable \$samtools -star-executable \$star -output-dir . -work-area wrkarea -O out -lds2 genome/lds2.db
+
+    # re-header BAM, dropping @PG and @CO lines containing non-deterministic elements.
+    for bam in *.bam; do
+        hdr="\$bam".hdr
+        samtools view -H "\$bam" | grep -vE '^@PG|^@CO' > "\$hdr"
+        samtools reheader --no-PG "\$hdr" "\$bam" > "\$bam".new  # NB: couldn't get --in-place to work
+        rm -f "\$hdr"
+        mv "\$bam".new "\$bam"
+
+        # recreate index
+        [[ -f "\${bam}.bai" ]] && samtools index -@ 4 -b "\$bam"
+        [[ -f "\${bam}.csi" ]] && samtools index -@ 4 -c "\$bam"
+    done
     """
     
     stub:
@@ -79,8 +92,9 @@ process run_star {
         def effective_params = get_effective_params(parameters, use_zcat, max_intron, cpus)
         println("Effective STAR parameters: $effective_params")
     """
-    touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam
-    touch ${assembly}-${sampleID}-Aligned.out.Sorted.bam.csi
+    # NB: see GP-40504
+    echo ${task.index} > ${assembly}-${sampleID}-Aligned.out.Sorted.bam
+    echo ${task.index} > ${assembly}-${sampleID}-Aligned.out.Sorted.bam.csi
     """
 }
 

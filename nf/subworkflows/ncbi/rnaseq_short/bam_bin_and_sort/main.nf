@@ -122,7 +122,8 @@ process bam_bin {
         exit 1
     fi
 
-    touch $output/\$assembly-\$run.bins
+    # NB: see GP-40504
+    echo ${task.index} > $output/\$assembly-\$run.bins
     """
 }
 

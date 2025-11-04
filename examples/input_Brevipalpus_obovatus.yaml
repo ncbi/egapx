@@ -1,0 +1,6 @@
+genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/050/580/445/GCA_050580445.1_ASM5058044v1/GCA_050580445.1_ASM5058044v1_genomic.fna.gz
+taxid: 246614
+short_reads:
+ - SRR33694212
+long_reads:
+ - SRR33704642
