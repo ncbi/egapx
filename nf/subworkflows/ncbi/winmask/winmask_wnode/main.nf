@@ -3,8 +3,6 @@ nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
 
-split_count=16
-
 
 workflow winmask_wnode {
     take:
@@ -30,23 +28,25 @@ workflow winmask_wnode {
 
 
 process gpx_qsubmit {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path genome_asnb
         path seqids
-        val params
+        val parameters
     output:
         path "job.*"
         env lines_per_file
     script:
-        njobs=split_count
+        njobs=task.ext.split_jobs
     """
     echo $seqids > seqids.mft
     mkdir -p tmp/asncache
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${genome_asnb} -oseq-ids spids -split-sequences
 
-    gpx_qsubmit $params -ids-manifest seqids.mft -o jobs -nogenbank -asn-cache tmp/asncache/
+    gpx_qsubmit $parameters -ids-manifest seqids.mft -o jobs -nogenbank -asn-cache tmp/asncache/
     total_lines=\$(wc -l <jobs)
-    (( lines_per_file = (total_lines + ${njobs} - 1) / ${njobs} ))
+    (( lines_per_file = (\$total_lines + $njobs - 1) / $njobs ))
     echo total_lines=\$total_lines, lines_per_file=\$lines_per_file
     # split -l\$lines_per_file jobs job. -da 3
     # Use round robin to distribute jobs across nodes more evenly
@@ -72,6 +72,8 @@ process gpx_qsubmit {
 
 
 process run_winmask_wnode {
+    label 'multi_node'
+    label 'small_mem'
     input:
         path genome_asnb
         path winmask_stats // 
@@ -82,19 +84,13 @@ process run_winmask_wnode {
         path "mask/*", emit: "mask"
     script:
     """
-    njobs=`wc -l <$jobs`
-    if [ \$njobs -lt 16 ]; then
-        threads=\$njobs
-    else
-        threads=16
-    fi
     mkdir -p tmp/interim
     mkdir -p tmp/asncache
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${genome_asnb} -oseq-ids spids -split-sequences
     filename=\$(basename -- "$jobs")
     extension="\${filename##*.}"
     (( start_job_id = ((10#\$extension) * $lines_per_file) + 1 ))
-    winmasker_wnode -ustat $winmask_stats -asn-cache tmp/asncache/ -workers \$threads -start-job-id \$start_job_id -input-jobs $jobs -nogenbank  -O tmp/interim $parameters
+    winmasker_wnode -ustat $winmask_stats -asn-cache tmp/asncache/ -workers ${task.ext.threads} -start-job-id \$start_job_id -input-jobs $jobs -nogenbank  -O tmp/interim $parameters > /dev/null 2> /dev/null
     mkdir -p mask
     cat tmp/interim/* > mask/winmasker_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp
@@ -108,6 +104,8 @@ process run_winmask_wnode {
 
 
 process gpx_make_outputs {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "gpx_inputs/*"
         val parameters
@@ -128,6 +126,8 @@ process gpx_make_outputs {
 
 
 process combine_blast_db {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "combine_db_inputs/*"
         val parameters

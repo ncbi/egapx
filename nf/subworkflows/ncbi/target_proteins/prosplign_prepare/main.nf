@@ -22,6 +22,8 @@ workflow prosplign_prepare {
 
 
 process run_prosplign_prepare{
+    label 'single_cpu'
+    label 'med_mem'
     input:
         path genome_asnb
         path proteins_asn

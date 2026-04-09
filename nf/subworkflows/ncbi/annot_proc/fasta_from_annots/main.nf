@@ -19,6 +19,8 @@ workflow generate_fasta_from_annots {
 
 
 process gnomon_asn2fasta {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path gencoll_asn, stageAs: 'gencoll.asn'
         path scaffolds, stageAs: 'input/*' // asn seqentry

@@ -62,11 +62,9 @@ workflow egapx {
         def proteins = input_params.get('proteins', [])
         def proteins_trusted = input_params.get('proteins_trusted', [])
         def additional_proteins = input_params.get('additional_proteins', [])
-        def short_reads_query = input_params.get('short_reads_query', [])
         def short_reads_ids = input_params.get('short_reads_ids', [])
         def short_reads = input_params.get('short_reads', [])
         def short_reads_metadata = input_params.get('short_reads_metadata', [])
-        def long_reads_query = input_params.get('long_reads_query', [])
         def long_reads_ids = input_params.get('long_reads_ids', [])
         def long_reads = input_params.get('long_reads', [])
         def long_reads_metadata = input_params.get('long_reads_metadata', [])
@@ -130,8 +128,8 @@ workflow egapx {
         def star_bam = []
         sra_exons = []
         sra_exons_slices = []
-        if (short_reads_query || short_reads_ids || short_reads) {
-            rnaseq_short_plane(genome_asn, scaffolds, unpacked_genome, short_reads_query, short_reads_ids, short_reads, short_reads_metadata, organelles, tax_id, eff_max_intron, task_params) 
+        if (short_reads_ids || short_reads) {
+            rnaseq_short_plane(genome_asn, scaffolds, unpacked_genome, short_reads_ids, short_reads, short_reads_metadata, organelles, tax_id, eff_max_intron, task_params) 
             rnaseq_short_alignments = rnaseq_short_plane.out.rnaseq_alignments
             sra_exons = rnaseq_short_plane.out.sra_exons
             sra_exons_slices = rnaseq_short_plane.out.sra_exons_slices
@@ -142,9 +140,9 @@ workflow egapx {
 
         // Combine RNASeq short and protein alignments
         def rnsp_alignments
-        if (proteins && (short_reads_query || short_reads_ids || short_reads)) [
+        if (proteins && (short_reads_ids || short_reads)) {
             rnsp_alignments = rnaseq_short_alignments.combine(protein_alignments)
-        ] else if (proteins) {
+        } else if (proteins) {
             rnsp_alignments = protein_alignments
         } else {
             rnsp_alignments = rnaseq_short_alignments
@@ -152,8 +150,8 @@ workflow egapx {
 
         def alignments
         // RNASeq long alignments
-        if (long_reads_query || long_reads_ids || long_reads) {
-            rnaseq_long_plane(unpacked_genome, gencoll_asn, long_reads_query, long_reads_ids, long_reads, eff_max_intron, task_params)
+        if (long_reads_ids || long_reads) {
+            rnaseq_long_plane(unpacked_genome, gencoll_asn, long_reads_ids, long_reads, eff_max_intron, task_params)
             alignments = rnsp_alignments.combine(rnaseq_long_plane.out.alignments)
         } else {
             alignments = rnsp_alignments

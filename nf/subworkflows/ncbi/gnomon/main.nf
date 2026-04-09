@@ -15,6 +15,7 @@ include { fetch_swiss_prot_asn; get_swiss_prot_ids } from "../shared/diamond/mai
 include { diamond_worker} from "${params.import_prefix}gnomon/diamond_identify/main"
 include { prot_gnomon_prepare } from "${params.import_prefix}gnomon/prot_gnomon_prepare/main"
 include { best_protein_hits } from "${params.import_prefix}gnomon/best_protein_hits/main"
+include { gnomon_align_sort } from "./gnomon_align_sort/main"
 
 //include { locus_track } from './locus_track/main'
 //include { locus_link } from './locus_link/main'
@@ -46,18 +47,19 @@ workflow gnomon_plane {
         task_params     // task parameters for every task
     main:
         // GNOMON
+        gnomon_align_sort(alignments, task_params.get('gnomon_align_sort', [:]))
         def effective_hmm
         if (!train_hmm) {
             effective_hmm = hmm_params
         } else {
-            effective_hmm = gnomon_training_iterations(hmm_params, genome_asn, proteins_asn, alignments, /* evidence_denylist */ [], /* gap_fill_allowlist */ [],
+            effective_hmm = gnomon_training_iterations(hmm_params, genome_asn, proteins_asn, gnomon_align_sort.out.sorted_alignments, /* evidence_denylist */ [], /* gap_fill_allowlist */ [],
                 [proteins_trusted].flatten(), scaffolds, softmask, scaffolds,
                 max_intron,
                 task_params)
         }
 
 
-        (chains, chains_slices, evidence, evidence_slices, _ ) = chainer(alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, [proteins_trusted].flatten(), genome_asn, proteins_asn, task_params.get('chainer_wnode', [:]))
+        (chains, chains_slices, evidence, evidence_slices, _ ) = chainer(gnomon_align_sort.out.sorted_alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, [proteins_trusted].flatten(), genome_asn, proteins_asn, task_params.get('chainer_wnode', [:]))
         (gn_models, gn_models_slices) = gnomon_wnode(scaffolds, chains, chains_slices, effective_hmm, [], softmask, genome_asn, proteins_asn, task_params.get('gnomon_wnode', [:]))
         (summaries, qual_report, report) = gnomon_evidence_summary(genome_asn, proteins_asn, evidence, evidence_slices, gn_models.collect(), gn_models_slices.collect(), sra_exons, sra_exons_slices, tax_id, task_params.get('gnomon_evidence_summary', [:]))
                 // might come its own plane

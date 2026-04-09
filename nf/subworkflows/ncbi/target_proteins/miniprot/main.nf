@@ -5,8 +5,8 @@ nextflow.enable.dsl=2
 include { merge_params } from '../../utilities'
 
 
-def get_effective_params(parameters, max_intron) {
-    def default_params = "-t 8 -G ${max_intron}"
+def get_effective_params(parameters, max_intron, cpus) {
+    def default_params = "-t ${cpus} -G ${max_intron}"
     def value = parameters.get("miniprot", "")
     value = value.replaceFirst("-cpu-count", "-t")
     value = value.replaceFirst("-max-intron", "-G")
@@ -38,6 +38,8 @@ workflow miniprot {
 
 
 process split_proteins {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path fasta_proteins_file, stageAs: 'inputs/input_prots.faa*'
         val  items_per_chunk
@@ -72,16 +74,17 @@ process split_proteins {
     """
     # NB: see GP-40504
     mkdir -p output
-    echo 1 > output/1.fa
-    echo 2 > output/2.fa
-    echo 3 > output/3.fa
+    echo 1 > output/aligns.1.fa
+    echo 2 > output/aligns.2.fa
+    echo 3 > output/aligns.3.fa
     """
 }
 
 
 process run_miniprot {
-    label 'huge_job'
     label 'long_job'
+    label 'multi_node'
+    label 'large_mem'
     input:
         path fasta_genome_file
         path fasta_proteins_file
@@ -92,7 +95,7 @@ process run_miniprot {
 
     script:
         def paf_name = fasta_proteins_file.baseName.toString() + ".paf"
-        def effective_params = get_effective_params(parameters, max_intron)
+        def effective_params = get_effective_params(parameters, max_intron, task.ext.threads)
         // println("Miniprot params: ${effective_params}")
     """
     mkdir -p output
@@ -101,7 +104,7 @@ process run_miniprot {
 
     stub:
         def paf_name = fasta_proteins_file.baseName.toString() + ".paf"
-        def effective_params = get_effective_params(parameters, max_intron)
+        def effective_params = get_effective_params(parameters, max_intron, task.ext.threads)
         println("Miniprot params: ${effective_params}")
     """
     mkdir -p output

@@ -3,8 +3,6 @@ nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
 
-split_count=16
-
 
 workflow prosplign_wnode {
     take:
@@ -28,6 +26,8 @@ workflow prosplign_wnode {
 
 
 process gpx_qsubmit {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path genome_asnb
         path proteins_asnb
@@ -37,7 +37,7 @@ process gpx_qsubmit {
         path "job.*"
         env lines_per_file
     script:
-        njobs=split_count
+        njobs=task.ext.split_jobs
     """
     mkdir -p tmp/asncache
     auto_prime_cache.py -cache tmp/asncache/  -i ${genome_asnb} -oseq-ids spids -split-sequences
@@ -70,8 +70,9 @@ process gpx_qsubmit {
 
 
 process run_prosplign_wnode {
-    label 'huge_job'
     label 'long_job'
+    label 'multi_node'  //this is not determined yet. subject to change
+    label 'med_mem'
     input:
         path genome_asnb
         path proteins_asnb
@@ -85,12 +86,6 @@ process run_prosplign_wnode {
     script:
         job_num = jobs.toString().tokenize('.').last().toInteger()
     """
-    njobs=`wc -l <$jobs`
-    if [ \$njobs -lt 16 ]; then
-        threads=\$njobs
-    else
-        threads=16
-    fi
     mkdir -p tmp/interim
     mkdir -p tmp/asncache
     auto_prime_cache.py -cache tmp/asncache/ -i ${genome_asnb} -oseq-ids spids -split-sequences
@@ -99,7 +94,7 @@ process run_prosplign_wnode {
     filename=\$(basename -- "$jobs")
     extension="\${filename##*.}"
     (( start_job_id = ((10#\$extension) * $lines_per_file) + 1 ))
-    prosplign_wnode -max_intron $max_intron -asn-cache tmp/asncache/ -workers \$threads -start-job-id \$start_job_id -input-jobs $jobs -nogenbank  -O tmp/interim $parameters
+    prosplign_wnode -max_intron $max_intron -asn-cache tmp/asncache/ -workers ${task.ext.threads} -start-job-id \$start_job_id -input-jobs $jobs -nogenbank  -O tmp/interim $parameters
     mkdir -p output
     cat tmp/interim/* > output/prosplign_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp
@@ -114,6 +109,8 @@ process run_prosplign_wnode {
 
 
 process gpx_qdump {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "inputs/*"
         val params
@@ -128,16 +125,3 @@ process gpx_qdump {
     touch prosplign.asn
     """
 }
-
-
-
-
-
-
-/*gpx_qsubmit -dryrun -NxM-threshold 10000 -affinity subject -asn-cache sequence_cache -asn-manifest compartments.mft
-prosplign_wnode -asn-cache sequence_cache -backlog 1 -compartment_penalty 0.5 -cut_flank_partial_codons true -fill_holes false -flank_positives 55 
--frameshift_opening 30 -gap_extension 1 -gap_opening 10 -intron_AT 25 -intron_GC 20 -intron_GT 15 -intron_non_consensus 34 -inverted_intron_extension 1000
- -max_bad_len 45 -max_extent 10000 -max_intron 400000 -maximize coverage -min_compartment_idty 0.5 -min_exon_ident 30 -min_exon_positives 55 
- -min_flanking_exon_len 15 -min_good_len 59 -min_intron_len 30 -min_positives 15 -min_singleton_idty 0.65 -service GPipeExec_Prod -start_bonus 8 
- -stop_bonus 8 -total_positives 70 -output prosplign.asn -output-manifest prosplign_align.mft -unzip '*'  -destination-dir out/
-gpx_qdump -output prosplign.asn -output-manifest prosplign_align.mft -unzip '*'  -destination-dir out/  */

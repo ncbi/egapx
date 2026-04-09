@@ -64,6 +64,8 @@ workflow final_asn_markup {
 
 
 process final_asn {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         val assembly_name
         path gencoll_asn, stageAs: 'gencoll.asn'
@@ -101,7 +103,6 @@ process final_asn {
 
     ##lds2_indexer -source genome/ -db LDS2
     ## prime_cache
-    # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
 
     final_asn $params -egapx -nogenbank  -gencoll-asn $gencoll_asn -asn-cache tmp/asncache/  \
         -scaffolds ./scaffold.mft  -chromosomes ./chromosome.mft  \

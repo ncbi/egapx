@@ -17,7 +17,7 @@ import ftplib
 from pathlib import Path
 from typing import List
 from urllib.request import urlopen
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 import json
 import csv
 import sqlite3
@@ -26,11 +26,53 @@ import hashlib
 import tarfile
 import urllib.request
 import urllib.error
+from typing import NamedTuple
 
-# Requires pip install pyyaml
+import ssl
+import urllib.parse
+import uuid
+import tempfile
+from html.parser import HTMLParser
+
+class SraMetadata(NamedTuple):
+    """Metadata for an SRA run or synthetic equivalent for non-SRA reads."""
+    run_accession: str
+    sample_accession: str
+    layout: str  # 'paired' or 'unpaired'
+    read_count: str
+    base_count: str
+    avg_insert_size: str  # "NA" placeholder
+    insert_size_stdev: str  # "NA" placeholder
+    platform: str
+    model: str
+    experiment: str
+    sra_study: str
+    bio_sample: str
+    project_id: str
+    bio_project: str
+    scientific_name: str
+    tax_id: str
+    release_date: str
+
+def safe_urlopen(url, **kwargs):
+    """Safe wrapper for urlopen that only allows http/https schemes."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"URL scheme '{parsed.scheme}' not allowed. Only http/https permitted.")
+    return urlopen(url, **kwargs)
+
+
+def safe_urlretrieve(url, filename):
+    """Safe wrapper for urlretrieve that only allows http/https schemes."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"URL scheme '{parsed.scheme}' not allowed. Only http/https permitted.")
+    return urllib.request.urlretrieve(url, filename)
+
+# Requires pip install -r requirements.txt
 import yaml
 
-software_version = "0.5.0"
+software_version = "0.5.1"
 DEFAULT_DATA_VERSION = "current_1"
 
 start_time = time.time()
@@ -101,6 +143,7 @@ def parse_args(argv):
     parser.add_argument("-e", "--executor", help="Nextflow executor, one of docker, singularity, aws, or local (for NCBI internal use only). Uses corresponding Nextflow config file", default="local")
     parser.add_argument("-c", "--config-dir", help="Directory for executor config files, default is ./egapx_config. Can be also set as env EGAPX_CONFIG_DIR", default="")
     parser.add_argument("-w", "--workdir", help="Working directory for cloud executor", default="")
+    parser.add_argument("--staging-dir", help="Staging subdirectory under workdir (for reproducible resume)", default="")
     parser.add_argument("-r", "--report", help="Report file prefix for report (.report.html) and timeline (.timeline.html) files, default is in output directory", default="")
     parser.add_argument("-n", "--dry-run", action="store_true", default=False)
     parser.add_argument("-st", "--stub-run", action="store_true", default=False)
@@ -109,12 +152,14 @@ def parse_args(argv):
     parser.add_argument("-ot", "--ortho-taxid", default=0, help="Taxid of reference data for orthology tasks")
     group = parser.add_argument_group('download')
     group.add_argument("-dl", "--download-only", help="Download external files to local storage, so that future runs can be isolated", action="store_true", default=False)
+    group.add_argument("-dn", "--download-needed", dest='download_needed', help="Download only data needed by the current input into local cache", action="store_true", default=False)
     parser.add_argument("-lc", "--local-cache", help="Where to store the downloaded files", default="")
     parser.add_argument("-q", "--quiet", dest='verbosity', action='store_const', const=VERBOSITY_QUIET, default=VERBOSITY_DEFAULT)
     parser.add_argument("-v", "--verbose", dest='verbosity', action='store_const', const=VERBOSITY_VERBOSE, default=VERBOSITY_DEFAULT)
     parser.add_argument("-V", "--version", dest='report_version', help="Report software version", action='store_true', default=False)
     parser.add_argument("-fn", "--func_name", help="func_name", default="")
     parser.add_argument("--force", dest='force', help="Force execution despite of warnings", action='store_true', default=False)
+    parser.add_argument("--ftp", dest='ftp', help="Enable FTP mode", action='store_true', default=False)
     
     return parser.parse_args(argv[1:])
 
@@ -184,11 +229,8 @@ class FtpDownloader:
         # local_is_dir = stat.S_ISDIR(local_stat.st_mode)
         #print(f"item: {ftp_item}")
         #print(f"stat: {local_stat}") 
- 
         local_stat_dt = datetime.datetime.fromtimestamp(local_stat.st_mtime)
-
         #print(f"should_dl: {ftp_size != local_stat.st_size}  {ftp_modify > local_stat_dt}  ")
-
         if (ftp_type == 'file' and ftp_size != local_stat.st_size) or (ftp_type=='OS.unix=symlink' and ftp_size >= local_stat.st_size):
             return True
 
@@ -196,8 +238,6 @@ class FtpDownloader:
             return True
 
         return False
-
-
     ## types
     ## cdir and pdir: . and ..: do nothing
     ## file: a file
@@ -241,12 +281,214 @@ class FtpDownloader:
         return rl
 
 
+class HttpsDownloader:
+    def __init__(self, verbosity=VERBOSITY_DEFAULT):
+        self.base_url = f"https://{FTP_EGAP_SERVER}/{FTP_EGAP_ROOT_PATH}/"
+        self.ssl_context = ssl.create_default_context()
+        self.opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=self.ssl_context))
+        self.host = f"https://{FTP_EGAP_SERVER}/"
+        self.verbosity = verbosity
+
+    def _url(self, path):
+        """Build full URL from base_url + path (path should not start with /)."""
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        return f"{self.base_url}/{path.lstrip('/')}"
+    
+    def _head(self, url):
+        """Return (headers dict, None) or (None, exception)."""
+        req = urllib.request.Request(url, method="HEAD")
+        try:
+            with self.opener.open(req, timeout=30) as r:
+                return (dict(r.headers), None)
+        except Exception as e:
+            return (None, e)
+
+    def should_download_file(self, url, local_name, headers=None):
+        """Return True if file should be downloaded (missing, or remote newer/larger)."""
+        if headers is None:
+            headers, err = self._head(url)
+            if err or not headers:
+                return True
+            # can't HEAD, so try to download
+        try:
+            local_stat = os.stat(local_name)
+        except FileNotFoundError:
+            return True
+        except NotADirectoryError:
+            return True
+        #local_mtime = datetime.datetime.fromtimestamp(local_stat.st_mtime)
+        remote_size = headers.get("Content-Length")
+        if remote_size is not None:
+            remote_size = int(remote_size)
+            if local_stat.st_size != remote_size:
+                return True
+        last_mod = headers.get("Last-Modified")
+        if last_mod:
+            try:
+                from email.utils import parsedate_to_datetime
+                remote_dt = parsedate_to_datetime(last_mod)
+
+                if remote_dt.timestamp() > local_stat.st_mtime:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def  download_file(self, url_or_path, local_path):
+        """Download a single file from URL (or base_url + path) to local_path. Returns True on success."""
+        url = self._url(url_or_path)
+        os.makedirs(os.path.dirname(local_path) or ".", exist_ok=True)
+        try:
+            req = urllib.request.Request(url)
+            with self.opener.open(req, timeout=60) as r:
+                with open(local_path,"wb") as f:
+                    f.write(r.read())
+            return True
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                if self.verbosity >= VERBOSITY_DEFAULT:
+                    print(f"FAILED 404: {url} -> {local_path}")
+            else:
+                if self.verbosity >= VERBOSITY_DEFAULT:
+                    print(f"FAILED HTTP {e.code}: {url} -> {local_path}")
+        except urllib.error.URLError as e:
+            if self.verbosity >= VERBOSITY_DEFAULT:
+                print(f"FAILED URL: {url} -> {local_path} - {e.reason}")
+        except (BrokenPipeError, ConnectionError) as e:
+            if self.verbosity >= VERBOSITY_DEFAULT:
+                print(f"FAILED connection: {url} -> {local_path}")
+            time.sleep(1)
+            if self.verbosity >= VERBOSITY_DEFAULT:
+                print("retrying...")
+            return self.download_file(url_or_path, local_path)
+        except Exception as e:
+            print(f"FAILED: {url} -> {local_path} - {e}")
+        return False
+
+    def _parse_index_links(self, html, base_url):
+        """Parse HTML directory index (Apache/nginx style) and return list of (href, is_dir). Skip parent dir."""
+        links = []
+        base = base_url if base_url.endswith("/") else base_url + "/"
+        class IndexParser(HTMLParser):
+            def handle_starttag(self,tag, attrs):
+                if tag != "a":
+                    return
+                for k, v in attrs:
+                    if k == "href" and v:
+                        v = v.strip()
+                        if not v or v in (".", "..")  or v.startswith("#") or v.lower().startswith("mailto:"):
+                            return
+                        full = urllib.parse.urljoin(base,v)
+                        is_dir = v.endswith("/") or full.endswith("/")
+                        links.append((full, is_dir))
+                        break
+        p = IndexParser()
+        try:
+            p.feed(html)
+        except Exception:
+            pass
+        return links
+
+    def _fetch_dir_listing(self,url):
+        """Fetch URL; if HTML, return (True, links). Else return (False, None)."""
+        try:
+            req = urllib.request.Request(url)
+            req.add_header("User-Agent","HttpsDownloader/1.0")
+            with  self.opener.open(req,timeout=30) as r: 
+                ct = r.headers.get("Content-Type", "")
+                data = r.read()
+                if "text/html" in ct:
+                    try:
+                        html = data.decode("utf-8", errors="replace")
+                        links = self._parse_index_links(html, url)
+                        return (True, links)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return (False, None)
+
+    def _is_parent_url(self, parent_url, child_url):
+        """
+        Checks if parent_url is a parent of child_url.
+        """
+        # 1. Parse both URLs into components
+        parent_parts = urlparse(parent_url)
+        child_parts = urlparse(child_url)
+
+        # 2. Check if scheme and network location (domain) are the same
+        if parent_parts.scheme != child_parts.scheme or parent_parts.netloc != child_parts.netloc:
+            return False
+
+        # 3. Use pathlib to compare the paths
+        try:
+            # Convert the URL paths to Path objects. We use PurePosixPath because URLs use forward slashes
+            parent_path = Path(parent_parts.path).resolve()
+            child_path = Path(child_parts.path).resolve()
+
+            # is_relative_to checks if child_path can be expressed as a relative path from parent_path
+            return child_path.is_relative_to(parent_path)
+        except Exception:
+            # Handle cases where path resolution might fail (e.g., non-existent paths on local machine)
+            # If paths cannot be resolved, we can fall back to a simpler string-based check
+            return child_parts.path.startswith(parent_parts.path)
+
+    def download_dir(self, url_or_path, local_dir, only_if_newer=True):
+        """Recursively download a directory. Works when the server returns an HTML directory index (e.g. Apache 'Index of').
+        url_or_path: directory URL or path under base_url (should end with / for a directory).
+        local_dir: local directory to write files into (created as needed).
+        only_if_newer: if True, skip files that are already up to date (HEAD + mtime/size).
+
+        """
+        url = self._url(url_or_path)
+        if not url.endswith("/"):
+             url += "/"
+        if self.verbosity > VERBOSITY_DEFAULT:
+            print(f"Downloading directory {url} to {local_dir} (only_if_newer={only_if_newer})")
+        os.makedirs(local_dir,exist_ok=True)
+        is_index, links = self._fetch_dir_listing(url)
+        if self.verbosity > VERBOSITY_DEFAULT:
+            print(f"Fetched directory listing for {url}: is_index={is_index}, {len(links) if links else 0} links")
+            print(f"Links: {links}")
+        if not is_index or not links:
+            return
+        seen = set()
+        for link_url, is_dir in links:
+            # Normalize and skip duplicates / parent
+            norm = urllib.parse.urlparse(link_url).path.rstrip("/")
+            name = os.path.basename(norm) or os.path.basename(urllib.parse.urlparse(link_url).path.rstrip("/"))
+            if self.verbosity > VERBOSITY_DEFAULT:
+                print(f"Processing link: {link_url} (is_dir={is_dir}) -> name: {name}")
+            if  not name or name in seen or name == "index.html" or name == "index.htm":
+                continue
+            if self._is_parent_url(link_url, url):
+                if self.verbosity > VERBOSITY_DEFAULT:
+                    print(f"Skipping parent URL: {link_url}")
+                continue
+            seen.add(name)
+            local_path = os.path.join(local_dir, name)
+            if self.verbosity > VERBOSITY_DEFAULT:
+                print(f"Link {link_url} is {'directory' if is_dir else 'file'}, local path: {local_path}")
+            if is_dir:
+                # Ensure trailing slash for directory
+                sub_url = link_url  if link_url.endswith("/") else link_url + "/"
+                if self.verbosity > VERBOSITY_DEFAULT:
+                    print(f"Recursively downloading directory {sub_url} to {local_path}")
+                self.download_dir(sub_url, local_path, only_if_newer=only_if_newer)
+            else:
+                if only_if_newer and os.path.isfile(local_path):
+                    if not self.should_download_file(link_url, local_path):
+                        continue
+                self.download_file(link_url, local_path)
+
+
 def download_data_manifest(data_version):
     done = False
     while not done:
         done = True # Be optimistic :-)
         manifest_url = f"{FTP_EGAP_ROOT}/{data_version}.mft"
-        manifest = urlopen(manifest_url)
+        manifest = safe_urlopen(manifest_url)
         manifest_list = []
         for line in manifest:
             line = line.decode("utf-8").strip()
@@ -298,15 +540,20 @@ def write_data_manifest_to_cache(cache_dir, manifest, data_version, effective_da
             f.write(effective_data_version + ".mft")
 
 
-def download_egapx_ftp_data(cache_dir, data_version):
+def download_egapx_data(cache_dir, data_version, use_ftp=False):
     manifest, effective_data_version = download_data_manifest(data_version)
     if data_version != effective_data_version:
         print(f"For replicating this run use --data-version {effective_data_version}")
     for line in manifest:
         print(f"Downloading {line}")
-        ftpd = FtpDownloader()
-        ftpd.connect(FTP_EGAP_SERVER)
-        ftpd.download_ftp_dir(f"{FTP_EGAP_ROOT_PATH}/{line}", os.path.join(cache_dir, line))
+        if use_ftp:
+            ftpd = FtpDownloader()
+            ftpd.connect(FTP_EGAP_SERVER)
+            ftpd.download_ftp_dir(f"{FTP_EGAP_ROOT_PATH}/{line}", os.path.join(cache_dir, line))
+        else:
+            # Implement HTTP download logic here if needed
+            downloader = HttpsDownloader(verbosity=verbosity)
+            downloader.download_dir(line, os.path.join(cache_dir, line))
     write_data_manifest_to_cache(cache_dir, manifest, data_version, effective_data_version)
     return 0
 
@@ -325,23 +572,136 @@ def repackage_inputs(run_inputs):
     return new_inputs
 
 
-def convert_value(value, key, strict):
-    "Convert paths to absolute paths when possible, look into objects and lists"
+def _get_uri_scheme(value):
+    if not isinstance(value, str):
+        return ''
+    mo = re.match(r'^([a-zA-Z][a-zA-Z0-9+.-]*)://', value)
+    return mo.group(1).lower() if mo else ''
+
+
+def is_foreign_path(value, executor='local'):
+    """A path is foreign if it needs staging before task execution."""
+    if not isinstance(value, str) or value == '':
+        return False
+    scheme = _get_uri_scheme(value)
+    if scheme in {'http', 'https', 'ftp'}:
+        return True
+    if executor == 'aws':
+        return scheme != 's3'
+    return False
+
+
+def _join_staging_path(staging_root, rel_path):
+    scheme = _get_uri_scheme(staging_root)
+    if scheme:
+        return f"{staging_root.rstrip('/')}/{rel_path.replace(os.sep, '/')}"
+    return os.path.join(staging_root, rel_path)
+
+
+def _build_staging_root(executor, workdir, staging_dir):
+    stage_name = staging_dir or f"egapx_stage_{uuid.uuid4().hex[:12]}"
+    work_root = workdir or 'work'
+    work_scheme = _get_uri_scheme(work_root)
+    if not work_scheme:
+        work_root = os.path.abspath(work_root)
+    return _join_staging_path(work_root, stage_name)
+
+
+def _make_staging_target(source, staging_root):
+    source_path = urlparse(source).path if _get_uri_scheme(source) else source
+    base_name = os.path.basename(source_path.rstrip('/')) or 'downloaded_input'
+    digest = hashlib.sha1(source.encode('utf-8')).hexdigest()[:12]
+    return _join_staging_path(staging_root, os.path.join(digest, base_name))
+
+
+def _convert_nested_paths(value, key, strict, leaf_converter):
+    """Apply leaf_converter to scalar values while recursively walking dict/list."""
     if isinstance(value, dict):
-        return {k: convert_value(v, key, strict) for k, v in value.items()}
-    elif isinstance(value, list):
-        return [convert_value(v, key, strict) for v in value]
-    else:
-        if not isinstance(value, str) or value == '' or re.match(r'[a-z0-9]{2,5}://', value):
-            # do not convert - this is a URL or empty string or non-file
-            return value
-        if not os.path.exists(value):
-            if strict:
-                raise OSError(ENOENT, f"File for parameter '{key}' doesn't exist", value)
-            else:
-                return value
+        return {
+            k: _convert_nested_paths(v, key, strict, leaf_converter)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _convert_nested_paths(v, key, strict, leaf_converter)
+            for v in value
+        ]
+    return leaf_converter(value, key, strict)
+
+
+def _apply_path_converters(run_inputs, input_converter, output_converter):
+    """Apply converters for known path-like keys in input and output sections."""
+    input_root = run_inputs['input']
+    for key in input_root:
+        if key in path_inputs:
+            strict = not key.endswith('reads')
+            input_root[key] = input_converter(input_root[key], key, strict)
+
+    if 'output' in run_inputs:
+        run_inputs['output'] = output_converter(run_inputs['output'], 'output', False)
+
+
+def _dedupe_transfer_plan(plan):
+    """Keep deterministic order while removing duplicate source/target entries."""
+    deduped = []
+    seen = set()
+    for item in plan:
+        key = (item['source'], item['target'])
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def convert_value(value, key, strict, executor='local', staging_root='', staging_plan=None, allow_staging=True):
+    "Convert paths to absolute paths when possible, look into objects and lists"
+    def _leaf(v, key_name, strict_mode):
+        if not isinstance(v, str) or v == '':
+            return v
+
+        scheme = _get_uri_scheme(v)
+
+        # Reuse locally cached foreign inputs when available (from -dn/-dl cache).
+        if scheme in {'http', 'https', 'ftp', 's3'}:
+            cache_dir = get_cache_dir()
+            if cache_dir:
+                cached_path = _find_cached_foreign_path(v, cache_dir)
+                if cached_path:
+                    return os.path.abspath(cached_path)
+
+        foreign = allow_staging and is_foreign_path(v, executor)
+        if foreign:
+            # For local files we still need to resolve/check source before staging.
+            source = v
+            if not scheme:
+                if not os.path.exists(v):
+                    if strict_mode:
+                        raise OSError(ENOENT, f"File for parameter '{key_name}' doesn't exist", v)
+                    return v
+                source = os.path.abspath(v)
+            staged_target = _make_staging_target(source, staging_root)
+            if staging_plan is not None:
+                staging_plan.append({
+                    'source': source,
+                    'target': staged_target,
+                    'key': key_name,
+                    'scheme': scheme or 'file',
+                    'foreign': True,
+                })
+            return staged_target
+
+        if scheme:
+            # Non-foreign URIs (for example s3:// on AWS) are kept as is.
+            return v
+        if not os.path.exists(v):
+            if strict_mode:
+                raise OSError(ENOENT, f"File for parameter '{key_name}' doesn't exist", v)
+            return v
         # convert to absolute path
-        return os.path.abspath(value)
+        return os.path.abspath(v)
+
+    return _convert_nested_paths(value, key, strict, _leaf)
 
 
 path_inputs = {'genome', 'hmm', 'softmask', 'reads_metadata', 'short_reads_metadata', 'long_reads_metadata', 'organelles',
@@ -351,13 +711,147 @@ path_inputs = {'genome', 'hmm', 'softmask', 'reads_metadata', 'short_reads_metad
                'cmsearch'}
 def convert_paths(run_inputs):
     "Convert paths to absolute paths where appropriate"
-    input_root = run_inputs['input']
-    for key in input_root:
-        if key in path_inputs:
-            strict = not key.endswith('reads')
-            input_root[key] = convert_value(input_root[key], key, strict)
-    if 'output' in run_inputs:
-        run_inputs['output'] = convert_value(run_inputs['output'], 'output', False)
+    return convert_paths_for_executor(run_inputs)
+
+
+def convert_paths_for_executor(run_inputs, executor='local', workdir='', staging_dir=''):
+    """Convert paths and replace foreign inputs with staging targets.
+
+    Returns a list of transfer plans to materialize in staging.
+    """
+    staging_root = _build_staging_root(executor, workdir, staging_dir)
+    staging_plan = []
+    _apply_path_converters(
+        run_inputs,
+        input_converter=lambda v, k, s: convert_value(
+            v, k, s,
+            executor=executor,
+            staging_root=staging_root,
+            staging_plan=staging_plan,
+            allow_staging=True,
+        ),
+        output_converter=lambda v, k, s: convert_value(
+            v, k, s,
+            executor=executor,
+            staging_root=staging_root,
+            staging_plan=None,
+            allow_staging=False,
+        ),
+    )
+    return _dedupe_transfer_plan(staging_plan)
+
+
+def stage_inputs_bulk(staging_plan, verbosity=VERBOSITY_DEFAULT):
+    """Materialize staged inputs from local/http/ftp sources."""
+    if not staging_plan:
+        return True, ''
+
+    msgs = []
+    http_downloader = HttpsDownloader(verbosity=verbosity)
+    ftp_downloaders = {}
+    temp_root = tempfile.mkdtemp(prefix='egapx_stage_upload_')
+
+    def _download_to_local_tmp(src, src_scheme):
+        base_name = os.path.basename(urlparse(src).path.rstrip('/')) if src_scheme else os.path.basename(src)
+        if not base_name:
+            base_name = f"staged_{uuid.uuid4().hex}"
+        local_tmp = os.path.join(temp_root, f"{uuid.uuid4().hex}_{base_name}")
+        os.makedirs(os.path.dirname(local_tmp), exist_ok=True)
+        if src_scheme in {'http', 'https'}:
+            if not http_downloader.download_file(src, local_tmp):
+                return '', f"Failed to download {src} -> {local_tmp}"
+            return local_tmp, ''
+        if src_scheme == 'ftp':
+            parsed = urlparse(src)
+            host = parsed.netloc
+            if host not in ftp_downloaders:
+                ftp_downloader = FtpDownloader()
+                ftp_downloader.connect(host)
+                ftp_downloaders[host] = ftp_downloader
+            ftp_path = parsed.path.lstrip('/')
+            if not ftp_path:
+                return '', f"Invalid FTP source path: {src}"
+            ftp_res = ftp_downloaders[host].download_ftp_file(ftp_path, local_tmp)
+            if ftp_res is not True:
+                return '', f"Failed to download FTP file {src} -> {local_tmp}"
+            return local_tmp, ''
+        return '', f"Unsupported temporary-download source scheme '{src_scheme}' for {src}"
+
+    try:
+        for item in staging_plan:
+            src = item['source']
+            dst = item['target']
+            src_scheme = _get_uri_scheme(src)
+            dst_scheme = _get_uri_scheme(dst)
+
+            if dst_scheme == 's3':
+                upload_src = src
+                if src_scheme in {'http', 'https', 'ftp'}:
+                    upload_src, err = _download_to_local_tmp(src, src_scheme)
+                    if err:
+                        return False, err
+                elif src_scheme == '':
+                    if not os.path.exists(src):
+                        return False, f"Local source for staging doesn't exist: {src}"
+                elif src_scheme != 's3':
+                    return False, f"Unsupported staging source scheme '{src_scheme}' for {src}"
+
+                try:
+                    subprocess.run(
+                        ["aws", "s3", "cp", upload_src, dst],
+                        check=True,
+                        stdout=None if verbosity >= VERBOSITY_VERBOSE else subprocess.DEVNULL,
+                        stderr=None if verbosity >= VERBOSITY_VERBOSE else subprocess.DEVNULL,
+                    )
+                except FileNotFoundError:
+                    return False, "AWS CLI not found in PATH, required for staging uploads to s3://"
+                except subprocess.CalledProcessError:
+                    return False, f"Failed to upload staged input {upload_src} -> {dst} using aws s3 cp"
+                continue
+
+            if dst_scheme in {'gs', 'az'}:
+                return False, f"Staging target '{dst}' is not supported by this runner"
+
+            os.makedirs(os.path.dirname(dst) or '.', exist_ok=True)
+
+            if src_scheme in {'http', 'https'}:
+                if not http_downloader.download_file(src, dst):
+                    return False, f"Failed to download {src} -> {dst}"
+            elif src_scheme == 'ftp':
+                parsed = urlparse(src)
+                host = parsed.netloc
+                if host not in ftp_downloaders:
+                    ftp_downloader = FtpDownloader()
+                    ftp_downloader.connect(host)
+                    ftp_downloaders[host] = ftp_downloader
+                ftp_path = parsed.path.lstrip('/')
+                if not ftp_path:
+                    return False, f"Invalid FTP source path: {src}"
+                ftp_res = ftp_downloaders[host].download_ftp_file(ftp_path, dst)
+                if ftp_res is not True:
+                    return False, f"Failed to download FTP file {src} -> {dst}"
+            elif src_scheme == 's3':
+                try:
+                    subprocess.run(
+                        ["aws", "s3", "cp", src, dst],
+                        check=True,
+                        stdout=None if verbosity >= VERBOSITY_VERBOSE else subprocess.DEVNULL,
+                        stderr=None if verbosity >= VERBOSITY_VERBOSE else subprocess.DEVNULL,
+                    )
+                except FileNotFoundError:
+                    return False, "AWS CLI not found in PATH, required for staging downloads from s3://"
+                except subprocess.CalledProcessError:
+                    return False, f"Failed to download staged input {src} -> {dst} using aws s3 cp"
+            elif src_scheme == '':
+                if not os.path.exists(src):
+                    return False, f"Local source for staging doesn't exist: {src}"
+                shutil.copy2(src, dst)
+            else:
+                return False, f"Unsupported staging source scheme '{src_scheme}' for {src}"
+    finally:
+        shutil.rmtree(temp_root, ignore_errors=True)
+
+    return True, '\n'.join(msgs)
 
 
 ##def flatten_list(nested_list):
@@ -384,7 +878,7 @@ def prepare_reads(run_inputs, force=False, **kw):
     res, msg, sras, nosra = res & res1, msg + msg1, sras + sra1, nosra + nosra1 
 
     sras = list(set(sras))
-    # print(f'sras 387:   {sras}') 
+    # print(f'sras 424:   {sras}') 
 
     if 'output' in run_inputs and run_inputs['output'] and os.path.exists(run_inputs['output']):    
         outfile_path = Path(run_inputs['output'], 'sra_metadata.dat')
@@ -420,22 +914,23 @@ def prepare_reads(run_inputs, force=False, **kw):
                 if for_download:
                     del run_inputs['input'][key + '_ids']
                     run_inputs['input'][key + '_query'] = query
+                    run_inputs['input'][key + '_filter'] = run_filter
                 # Should we limit the number of runs similarly to query result?
             elif key + '_query' in run_inputs['input']:
                 query = run_inputs['input'][key + '_query']
                 real_query = True
             if query:
                 sra_runs = sra_query(query, run_filter)
-                # print(sra_runs)
+                # print(f"sra_runs: {sra_runs}")
                 sra_runs_ids = list()
                 paired = 0
                 unpaired = 0
                 unidentified = 0
                 for rec in sra_runs:
-                    sra_runs_ids.append(rec[0])
-                    if rec[2] == 'paired':
+                    sra_runs_ids.append(rec.run_accession)
+                    if rec.layout == 'paired':
                         paired += 1
-                    elif rec[2] == 'unpaired':
+                    elif rec.layout == 'unpaired':
                         unpaired += 1
                     else:
                         unidentified += 1
@@ -466,11 +961,24 @@ def is_sra(run_name):
 
 
 def _pop_reads_input(run_inputs, reads_type):
-    if reads_type not in run_inputs['input']:
-        return False, None
-    reads = run_inputs['input'][reads_type]
-    del run_inputs['input'][reads_type]
-    return True, reads
+    if reads_type in run_inputs['input']:
+        reads = run_inputs['input'][reads_type]
+        del run_inputs['input'][reads_type]
+        return True, reads
+        
+    reads_type_ids = f"{reads_type}_ids"
+    if reads_type_ids in run_inputs['input']:
+        reads = run_inputs['input'][reads_type_ids]
+        del run_inputs['input'][reads_type_ids]
+        return True, reads
+        
+    reads_type_query = f"{reads_type}_query"
+    if reads_type_query in run_inputs['input']:
+        reads = run_inputs['input'][reads_type_query]
+        del run_inputs['input'][reads_type_query]
+        return True, reads
+        
+    return False, None
 
 
 def _parse_reads_table_file(filename):
@@ -521,21 +1029,6 @@ def _collect_from_flat_list_entry(rf, prefixes, sra_to_return, msg):
     msg += f"Invalid read input type for {rf}\n"
     return False, msg
 
-
-def _infer_sample_id_from_file_list1(file_list):
-    names = [re.match(r'([^.]+)', Path(x).name).group(1) for x in file_list]
-    names.sort()
-    if len(names) == 1:
-        sample_id = names[0]
-    else:
-        limit = min(len(names[0]), len(names[-1]))
-        i = 0
-        while i < limit and names[0][i] == names[-1][i]:
-            i += 1
-        sample_id = names[0][0:i]
-    while sample_id and sample_id[-1] in '._':
-        sample_id = sample_id[:-1]
-    return sample_id
 
 def _infer_sample_id_from_file_list(file_list):
     # Ensure all elements are strings
@@ -594,7 +1087,7 @@ def _process_list_reads(reads: list, prefixes: defaultdict(list), sra_to_return:
     return True, msg
 
 
-def _generate_fake_metadata(prefixes: defaultdict(list), sra_metadata_map: dict) -> (list, str):
+def _generate_fake_metadata(prefixes: defaultdict[str, list[str]], sra_metadata_map: dict[str, SraMetadata]) -> tuple[list[SraMetadata], str]:
     """ Generate minimal SRA metadata for non-SRA read inputs
     :param prefixes: map of run_name to list of read files
     :param sra_metadata_map: map of SRA run_name to existing metadata records
@@ -613,10 +1106,15 @@ def _generate_fake_metadata(prefixes: defaultdict(list), sra_metadata_map: dict)
             paired = 'paired' if len(files) == 2 else 'unpaired'
             if run_name_resolved in sra_metadata_map:
                 out_rec = list(sra_metadata_map[run_name_resolved])
+                if len(out_rec) == 13:
+                    out_rec.append('NA') # Insert 'NA' for bio_project
+                    out_rec.append('NA') # Insert 'NA' for scientific_name
+                    out_rec.append('0')  # Insert '0' for tax_id
+                    out_rec.append('NA') # Insert 'NA' for release_date
             else:
-                out_rec = [run_name_resolved, 'NA', paired, '2', '2', 'NA', 'NA',
-                           'SAMN_' + run_name_resolved, 'NA', 'NA', 'NA', 'NA', '0']
-            not_sra.append(out_rec)
+                out_rec = [run_name_resolved, 'NA', paired, '2', '2', 'NA', 'NA', 'NA', 'NA', 'NA', 'NA',
+                           'SAMN_' + run_name_resolved, 'NA', 'NA', 'NA', '0', 'NA']
+            not_sra.append(SraMetadata(*out_rec))
     return not_sra, error_msg
 
 
@@ -630,11 +1128,13 @@ def _validate_file_counts(prefixes):
 def prepare_reads_by_type(run_inputs, reads_type, reads_type_write=None, **kw):
     for_download = kw.get('for_download', False)
     fake_metadata = kw.get('fake_metadata', not for_download)
+    # print(f"Preparing reads for type '{reads_type}' with fake_metadata={fake_metadata}")
     res = True
     msg = ''
     sra_metadata_map = {}
 
     present, reads = _pop_reads_input(run_inputs, reads_type)
+    # print(f"Reads input for type '{reads_type}': {reads}")
     if not present:
         return res, msg, [], []
     if reads_type_write is None:
@@ -678,10 +1178,7 @@ def prepare_reads_by_type(run_inputs, reads_type, reads_type_write=None, **kw):
             return False, msg, sra_to_return, not_sra
         run_inputs['input'][reads_type_write] = [[k, v] for k, v in prefixes.items()]
     elif reads:
-        if for_download:
-            run_inputs['input'][f'{reads_type_write}_query'] = "[Accession] OR ".join(reads) + "[Accession]"
-        else:
-            run_inputs['input'][f'{reads_type_write}_ids'] = reads
+        run_inputs['input'][f'{reads_type_write}_ids'] = reads
 
     return res, msg, sra_to_return, not_sra
 
@@ -846,7 +1343,10 @@ def expand_and_validate_params(run_inputs):
     if inputs.get('cmsearch', {}).get('enabled'):
         inputs['cmsearch'] = {'files': [get_file_path('cmsearch', f) for f in "Rfam.seed rfam1410.cm rfam1410_amendments.xml".split()] }
         inputs['cmsearch']['enabled'] = True
-        assert len(inputs['cmsearch']['files']) == 3
+        if len(inputs['cmsearch']['files']) != 3:
+            print(f"ERROR: Expected 3 cmsearch files (Rfam.seed, rfam1410.cm, rfam1410_amendments.xml), but found {len(inputs['cmsearch']['files'])}.")
+            print("  Check that the cmsearch data files are properly configured.")
+            return False
     else:
         inputs['cmsearch'] = {'enabled':False}
 
@@ -935,8 +1435,8 @@ def get_config(script_directory, args):
     if not config_dir:
         config_dir = Path(os.getcwd()) / "egapx_config"
     if not Path(config_dir).is_dir():
-        # Create directory and copy executor config files there
-        from_dir = Path(script_directory) / 'assets' / 'config' / 'executor'
+        # Create directory and copy user config files there
+        from_dir = Path(script_directory) / 'assets' / 'config' / 'user'
         if args.verbosity >= VERBOSITY_VERBOSE:
             print(f"Copy config files from {from_dir} to {config_dir}")
         if not args.dry_run:
@@ -958,19 +1458,58 @@ def get_config(script_directory, args):
         if not mo:
             default_configs.append("docker_image.config")
         # Check whether the config specifies proccess memory or CPUs
-        mo = re.search(r"process.+(memory|cpus) *=", config_txt)
-        if not mo:
-            default_configs.append("process_resources.config")
+        #mo = re.search(r"process.+(memory|cpus) *=", config_txt)
+        #if not mo:
+        #    default_configs.append("process_resources.config")
     
     # Add mandatory configs
     config_files = [str(config_file)]
     for cf in default_configs:
-        config_files.append(os.path.join(script_directory, "assets/config", cf))
+        config_files.insert(0, os.path.join(script_directory, "assets/config", cf))
     return ",".join(config_files)
 
 
 lineage_cache = {}
 taxname_cache = {}
+
+def resilient_urlopen(url, max_retries=3, retry_delay=1.0):
+    """
+    Wrapper for safe_urlopen with retry logic for handling intermittent failures.
+    
+    Args:
+        url: URL to open
+        max_retries: Maximum number of retry attempts (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 1.0)
+                     Uses exponential backoff
+    
+    Returns:
+        Response object from urlopen
+    
+    Raises:
+        URLError or HTTPError if all retries fail or on non-retryable errors
+    """
+    delay = retry_delay
+    for attempt in range(max_retries):
+        try:
+            return safe_urlopen(url)
+        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            # Check if it's a retryable error
+            is_retryable = False
+            if isinstance(e, urllib.error.HTTPError):
+                # Retry on 503 (service unavailable) and 429 (rate limited)
+                is_retryable = e.code in (503, 429)
+            else:
+                # Retry on network errors (URLError)
+                is_retryable = True
+            
+            if is_retryable and attempt < max_retries - 1:
+                # Not the last attempt, wait and retry
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                # Last attempt or non-retryable error, propagate
+                raise
+
 def get_lineage_with_ranks(taxid):
     global lineage_cache
     global taxname_cache
@@ -1006,7 +1545,7 @@ def get_lineage_with_ranks(taxid):
             return lineage, ranks
     
     # Fallback to API
-    taxon_json_file = urlopen(dataset_taxonomy_url+str(taxid))
+    taxon_json_file = resilient_urlopen(dataset_taxonomy_url+str(taxid))
     taxon = json.load(taxon_json_file)["taxonomy_nodes"][0]
     if 'errors' in taxon:
         lineage_cache[taxid] = [], {}
@@ -1015,7 +1554,7 @@ def get_lineage_with_ranks(taxid):
     lineage = taxon["taxonomy"].get("lineage", [])
     lineage.append(taxon["taxonomy"]["tax_id"])
 
-    ranks_file = urlopen(dataset_taxonomy_url+",".join(map(str, lineage)))
+    ranks_file = resilient_urlopen(dataset_taxonomy_url+",".join(map(str, lineage)))
     nodes = json.load(ranks_file)["taxonomy_nodes"]
     for node in nodes:
         if 'rank' in node["taxonomy"]:
@@ -1032,55 +1571,58 @@ def get_lineage(taxid):
     return lineage
 
 
-def get_tax_name(taxid):
+def get_tax_name(taxid) -> str:
     """
     Returns the taxonomic name for a given taxid.
     NB: the name cache is valid only AFTER getting the lineage for the taxid or one of its descendants
     """
     global taxname_cache
-    return taxname_cache.get(taxid)
+    return taxname_cache.get(taxid, '')
 
 
 def get_tax_file(subsystem, tax_path):
     vfn = get_versioned_path(subsystem, tax_path)
     cache_dir = get_cache_dir()
     taxids_url = f"{FTP_EGAP_ROOT}/{vfn}"
-    taxids_file = []
-    if cache_dir:
-        taxids_path = os.path.join(cache_dir, vfn)
-        if os.path.exists(taxids_path):
-            with open(taxids_path, "rb") as r:
-                taxids_file = r.readlines()
-        else:
-            raise FileNotFoundError
-    else:
-        try:
-            taxids_file = urlopen(taxids_url)
-        except urllib.error.HTTPError as err:
-            raise FileNotFoundError
-    return taxids_file
+    taxids_path = os.path.join(cache_dir, vfn) if cache_dir else ""
+
+    if cache_dir and os.path.exists(taxids_path):
+        with open(taxids_path, "rb") as r:
+            return r.readlines()
+
+    try:
+        response = safe_urlopen(taxids_url)
+        contents = response.read()
+        if cache_dir:
+            os.makedirs(os.path.dirname(taxids_path), exist_ok=True)
+            with open(taxids_path, "wb") as w:
+                w.write(contents)
+        return contents.splitlines(keepends=True)
+    except urllib.error.HTTPError:
+        raise FileNotFoundError
 
 
 def read_versioned_file(subsystem, fname):
     vfn = get_versioned_path(subsystem, fname)
     cache_dir = get_cache_dir()
     taxids_url = f"{FTP_EGAP_ROOT}/{vfn}"
-    contents = ""
-    if cache_dir:
-        file_path = os.path.join(cache_dir, vfn)
-        if os.path.exists(file_path):
-            contents = Path(file_path).read_text(encoding='utf-8', errors='ignore')
-        else:
-            raise FileNotFoundError
-    else:
-        try:
-            response = urllib.request.urlopen(taxids_url)
-            bytes = response.read()
-            encoding = response.headers.get_content_charset() or 'utf-8'
-            contents = bytes.decode(encoding)
-        except urllib.error.HTTPError:
-            raise FileNotFoundError
-    return contents
+    file_path = os.path.join(cache_dir, vfn) if cache_dir else ""
+
+    if cache_dir and os.path.exists(file_path):
+        return Path(file_path).read_text(encoding='utf-8', errors='ignore')
+
+    try:
+        response = safe_urlopen(taxids_url)
+        raw = response.read()
+        encoding = response.headers.get_content_charset() or 'utf-8'
+        contents = raw.decode(encoding)
+        if cache_dir:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'wb') as w:
+                w.write(raw)
+        return contents
+    except urllib.error.HTTPError:
+        raise FileNotFoundError
 
 
 def check_supported_taxid(taxid):
@@ -1364,24 +1906,68 @@ def download_busco_lineage_set(cache_dir):
     busco_list_url = f"{BUSCO_DATA_URL}/file_versions.tsv"
     if not os.path.exists(busco_list_file):
         os.makedirs(busco_downloads_dir, exist_ok=True)
-        urllib.request.urlretrieve(busco_list_url, busco_list_file)
+        safe_urlretrieve(busco_list_url, busco_list_file)
 
 
 def check_busco_lineage(cache_dir, lineage):
     busco_downloads_dir = os.path.join(cache_dir, "busco_downloads")
     lineages_path = os.path.join(busco_downloads_dir, "lineages")
+    return check_busco_lineage_in_lineages_path(lineages_path, lineage)
+
+
+def check_busco_lineage_in_lineages_path(lineages_path, lineage):
     lineage_path = os.path.join(lineages_path, lineage)
     if not os.path.isdir(lineage_path) or not os.listdir(lineage_path):
         return False
-    if not os.path.exists(os.path.join(lineages_path, f"{lineage}.list")):
-        return False
-    for line in open(os.path.join(lineages_path, f"{lineage}.list"), "rt"):
-        line = line.strip()
-        if not line:
-            continue
-        if not os.path.exists(os.path.join(lineages_path, line)):
-            return False
+
+    # Some externally prepared BUSCO bundles contain only lineages/<lineage>
+    # without a companion <lineage>.list file. Accept these as valid.
+    lineage_list = os.path.join(lineages_path, f"{lineage}.list")
+    if os.path.exists(lineage_list):
+        for line in open(lineage_list, "rt"):
+            line = line.strip()
+            if not line:
+                continue
+            if not os.path.exists(os.path.join(lineages_path, line)):
+                return False
     return True
+
+
+def resolve_busco_lineage_download_path(busco_input_path, lineage):
+    """Resolve and validate BUSCO lineage input path.
+
+    Supported forms:
+    - BUSCO downloads root containing file_versions.tsv and lineages/
+    - lineages/ directory containing <lineage>/
+    - direct path to the required lineage directory
+    """
+    if not isinstance(busco_input_path, str) or not busco_input_path.strip():
+        return False, '', "Parameter 'busco_lineage_download' must be a non-empty path"
+
+    candidate = os.path.abspath(busco_input_path)
+    if not os.path.isdir(candidate):
+        return False, '', f"BUSCO path does not exist or is not a directory: {candidate}"
+
+    # Case 1: root directory with file_versions.tsv and lineages/
+    root_list = os.path.join(candidate, "file_versions.tsv")
+    root_lineages = os.path.join(candidate, "lineages")
+    if os.path.isfile(root_list) and os.path.isdir(root_lineages):
+        if check_busco_lineage_in_lineages_path(root_lineages, lineage):
+            return True, os.path.join(root_lineages, lineage), ''
+        return False, '', f"BUSCO lineage '{lineage}' not found or invalid under {root_lineages}"
+
+    # Case 2: lineages directory
+    if check_busco_lineage_in_lineages_path(candidate, lineage):
+        return True, os.path.join(candidate, lineage), ''
+
+    # Case 3: direct lineage directory
+    if os.path.basename(candidate.rstrip('/')) == lineage and os.listdir(candidate):
+        return True, candidate, ''
+
+    return False, '', (
+        f"BUSCO path {candidate} is neither a BUSCO downloads root, lineages directory, "
+        f"nor a valid lineage directory for '{lineage}'"
+    )
 
 
 def download_busco_lineage(cache_dir, lineage):
@@ -1399,12 +1985,24 @@ def download_busco_lineage(cache_dir, lineage):
     busco_lineage_url = f"{BUSCO_DATA_URL}/lineages/{lineage}.{lineage_date}.tar.gz"
     busco_lineage_file = os.path.join(busco_downloads_dir, f"{lineage}.tar.gz")
     os.makedirs(lineages_path, exist_ok=True)
-    urllib.request.urlretrieve(busco_lineage_url, busco_lineage_file)
+    safe_urlretrieve(busco_lineage_url, busco_lineage_file)
     with tarfile.open(busco_lineage_file) as tar:
         with open(os.path.join(lineages_path, f"{lineage}.list"), "wt") as tar_list:
             tar_list.write("\n".join(tar.getnames()))
         tar.extractall(path=lineages_path)
     os.remove(busco_lineage_file)
+
+
+def ensure_busco_lineage_for_inputs(cache_dir, inputs):
+    """Ensure BUSCO lineage data is available for run inputs unless pre-specified."""
+    # If busco_lineage_download is set, it means lineage data was provided by user.
+    if inputs.get('busco_lineage_download'):
+        return
+
+    download_busco_lineage_set(cache_dir)
+    busco_lineage = inputs.get('busco_lineage') or get_busco_lineage(inputs['taxid'])
+    print(f"Downloading BUSCO lineage {busco_lineage}")
+    download_busco_lineage(cache_dir, busco_lineage)
 
 
 def get_busco_lineage_set():
@@ -1417,7 +2015,7 @@ def get_busco_lineage_set():
     if os.path.exists(busco_list_file):
         return { x[0]: x[1] for x in map(lambda x: x.split('\t'), open(busco_list_file, 'r').readlines())}
     else:
-        return { x[0]: x[1] for x in map(lambda x: x.decode("utf-8").split('\t'), urlopen(busco_list_url).readlines())}
+        return { x[0]: x[1] for x in map(lambda x: x.decode("utf-8").split('\t'), safe_urlopen(busco_list_url).readlines())}
 
 
 busco_name_fixes = {
@@ -1630,15 +2228,15 @@ def collect_logs(outdir):
             else:
                 # Local filesystem
                 task_workdir_stub = os.path.join(workdir, hash_parts[0])
-                cp = subprocess.run(["ls", "-1", task_workdir_stub], check=True, capture_output=True)
-                lines = cp.stdout.decode('utf-8').split('\n')
+                lines = os.listdir(task_workdir_stub)
                 # print(lines)
                 for line in lines:
                     if line.startswith(hash_parts[1]):
                         task_workdir = os.path.join(task_workdir_stub, line)
                         break
 
-                cp = subprocess.run(f"cp {task_workdir}/.command.* {task_dst}", shell=True, check=True, capture_output=True)
+                for src_file in glob.glob(os.path.join(task_workdir, ".command.*")):
+                    shutil.copy(src_file, task_dst)
 
             logs = glob.glob(os.path.join(task_dst, ".command.*"))
             # Make logs visible
@@ -1670,7 +2268,7 @@ def sra_uids_query(sra_potential_query):
     if 'biomol_transcript' not in sra_potential_query:
         sra_potential_query += biomol_str
    
-    esearch = urlopen(esearch_url+quote(sra_potential_query.encode('utf-8') ))
+    esearch = safe_urlopen(esearch_url+quote(sra_potential_query.encode('utf-8')))
     esearch_json = json.load(esearch)
     uids = esearch_json["esearchresult"]["idlist"]
     return uids
@@ -1678,9 +2276,18 @@ def sra_uids_query(sra_potential_query):
     ##print(esearch_json)
 
 
-def sra_metadata_query(sra_uids_list, run_filter=None):
+def sra_metadata_query(sra_uids_list: list[str], run_filter: set[str] | None = None) -> list[SraMetadata]:
+    """Query NCBI for SRA run metadata.
+    
+    Args:
+        sra_uids_list: List of SRA UIDs to query
+        run_filter: Optional set of run accessions to filter results
+        
+    Returns:
+        List of SraMetadata records
+    """
     uids = ','.join(sra_uids_list)
-    runinfo = urlopen(runinfo_url+uids)
+    runinfo = safe_urlopen(runinfo_url+uids)
     runinfo_csv = runinfo.read().decode("utf-8")
     ##print(runinfo_csv)
 
@@ -1692,9 +2299,10 @@ def sra_metadata_query(sra_uids_list, run_filter=None):
         keypos[k] = i
         ##print(i, " : ", k)
     ##sra_meta_keys = ["SRA run accession", "SRA sample accession", "Run type", "SRA read count", "SRA base count", "Average insert size", "Insert size stdev",
-    ##            "Platform type", "Model", "SRA Experiment accession", "SRA Study accession", "Biosample accession", "Bioproject ID", "Bioproject Accession", "Scientific name", "TaxID", "Release date"]
+    ##            "Platform type", "Model", "SRA Experiment accession", "SRA Study accession", "Biosample accession", "Bioproject ID",
+    ##            "Bioproject Accession", "Scientific name", "TaxID", "Release date"]
     
-    records = {}
+    records: dict[str, SraMetadata] = {}
     for parts in csv.reader(body, quotechar='"', delimiter=',', quoting=csv.QUOTE_ALL, skipinitialspace=True):
         if len(parts) == 0:
             continue
@@ -1726,15 +2334,24 @@ def sra_metadata_query(sra_uids_list, run_filter=None):
                     record.append(str(i))
             else:
                 record.append(v)
-        records[run] = record
+        records[run] = SraMetadata(*record)
         # print(TAB.join(record))
     return records.values()
 
 
-g_sra_to_file_map = {}
-g_query_to_accessions_map = {}
-g_sra_metadata_map = {}
-def read_cache():
+g_sra_to_file_map: dict[str, list[str]] = {}
+g_query_to_accessions_map: dict[str, list[str]] = {}
+g_sra_metadata_map: dict[str, SraMetadata] = {}
+
+def read_cache() -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, SraMetadata]]:
+    """Read cached SRA data from disk.
+    
+    Returns:
+        tuple of:
+            - sra_to_file_map: run accession -> list of file paths
+            - query_to_accessions_map: query hash -> list of run accessions
+            - sra_metadata_map: run accession -> SraMetadata
+    """
     global g_sra_to_file_map
     global g_query_to_accessions_map
     global g_sra_metadata_map
@@ -1749,65 +2366,94 @@ def read_cache():
             if os.path.isfile(sra_queries_file):
                 g_query_to_accessions_map = yaml.safe_load(open(sra_queries_file, 'r'))
         if not g_sra_metadata_map:
-            sra_metadata_file = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER, SRA_METADATA_FILE)
-            if os.path.isfile(sra_metadata_file):
-                g_sra_metadata_map = yaml.safe_load(open(sra_metadata_file, 'r'))
+                sra_metadata_file = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER, SRA_METADATA_FILE)
+                if os.path.isfile(sra_metadata_file):
+                    raw_metadata = yaml.safe_load(open(sra_metadata_file, 'r'))
+                    if raw_metadata:
+                        for k, v in raw_metadata.items():
+                            if isinstance(v, list) and len(v) == 17:
+                                g_sra_metadata_map[k] = SraMetadata(*v)
+                            elif isinstance(v, dict):
+                                g_sra_metadata_map[k] = SraMetadata(**v)
+    return g_sra_to_file_map, g_query_to_accessions_map, g_sra_metadata_map
 
-def sra_query_cached(query, run_filter=None):
-    global g_sra_to_file_map
-    global g_query_to_accessions_map
-    global g_sra_metadata_map
-    read_cache()
-    metadata_map = {}
-    file_map = {}
+
+def sra_query_cached(query, run_filter=None) -> tuple[dict[str, SraMetadata], dict[str, list[str]]]:
+    """Query SRA with caching support.
+    
+    Args:
+        query: Entrez query string
+        run_filter: Optional list of run accessions to filter results
+        
+    Returns:
+        tuple of:
+            - metadata_map: run accession -> SraMetadata
+            - file_map: run accession -> list of cached file paths
+    """
+    sra_to_file_map, query_to_accessions_map, sra_metadata_map = read_cache()
+    metadata_map: dict[str, SraMetadata] = {}
+    file_map: dict[str, list[str]] = {}
 
     query_hash = hashlib.sha1(query.encode()).hexdigest()
-    if g_query_to_accessions_map and query_hash in g_query_to_accessions_map:
-        accessions = g_query_to_accessions_map.get(query_hash, {})
+    if query_to_accessions_map and query_hash in query_to_accessions_map:
+        accessions = query_to_accessions_map.get(query_hash, {})
         if accessions:
             runs = accessions.get('runs', [])
             # TODO: should we apply filter logic here as well?
             for run in runs:
-                fnames = g_sra_to_file_map.get(run)
+                fnames = sra_to_file_map.get(run)
                 if fnames:
                     file_map[run] = fnames
-                if run in g_sra_metadata_map:
-                    metadata_map[run] = g_sra_metadata_map[run]
+                if run in sra_metadata_map:
+                    metadata_map[run] = sra_metadata_map[run]
     else:
         metadata = sra_query(query, run_filter)
         if metadata:
             for rec in metadata:
-                metadata_map[rec[0]] = rec
+                metadata_map[rec.run_accession] = rec
     
     return metadata_map, file_map
 
 
 def get_cached_sra_files(run_name):
-    global g_sra_to_file_map
-    read_cache()
-    return g_sra_to_file_map.get(run_name)
+    sra_to_file_map, _, _ = read_cache()
+    return sra_to_file_map.get(run_name)
 
 
-def get_sra_metadata(runs):
-    global g_sra_metadata_map
-    metadata_map = {}
-    read_cache()
-    if g_sra_metadata_map:
+def get_sra_metadata(runs) -> dict[str, SraMetadata]:
+    """Get metadata for a list of SRA runs.
+    
+    Args:
+        runs: List of SRA run accessions
+        
+    Returns:
+        Map of run accession -> SraMetadata
+    """
+    metadata_map: dict[str, SraMetadata] = {}
+    _, _, sra_metadata_map = read_cache()
+    if sra_metadata_map:
         for run in runs:
-            if run in g_sra_metadata_map:
-                metadata_map[run] = g_sra_metadata_map[run]
+            if run in sra_metadata_map:
+                metadata_map[run] = sra_metadata_map[run]
     else:
         metadata = sra_query(" OR ".join(runs), runs)
         if metadata:
             for rec in metadata:
-                metadata_map[rec[0]] = rec
+                metadata_map[rec.run_accession] = rec
 
     return metadata_map
 
 
-def sra_query(query, run_filter=None):
-    """ sra_ids_query and sra_metadata_query are always used together and intermediate
-    results are never used. We combine them here and add an ability to filter by ids in query"""
+def sra_query(query, run_filter=None) -> list[SraMetadata]:
+    """Query SRA and return metadata for matching runs.
+    
+    Args:
+        query: Entrez query string
+        run_filter: Optional list of run accessions to filter results
+        
+    Returns:
+        List of SraMetadata records
+    """
     global verbosity
     if verbosity >= VERBOSITY_VERBOSE:
         print(f"sra_query: query '{query}', run_filter {run_filter}")
@@ -1826,21 +2472,22 @@ def save_sra_metadata_file(dest, sras, non_sras):
         metadata = get_sra_metadata(sras).values()
 
     sra_meta_keys = ["SRA run accession", "SRA sample accession", "Run type", "SRA read count", "SRA base count", "Average insert size", "Insert size stdev",
-                "Platform type", "Model", "SRA Experiment accession", "SRA Study accession", "Biosample accession", "Bioproject ID", "Bioproject Accession", "Scientific name", "TaxID", "Release date"]
+                     "Platform type", "Model", "SRA Experiment accession", "SRA Study accession", "Biosample accession", "Bioproject ID",
+                     "Bioproject Accession", "Scientific name", "TaxID", "Release date"]
   
     seen_sras = set()
     with open(dest, 'wt') as outf:
         print(f"#{TAB.join(sra_meta_keys)}", file=outf)
         for md in metadata:
-            print(TAB.join(md), file=outf)
-            seen_sras.add(md[0])
+            print(TAB.join(str(x) for x in md), file=outf)
+            seen_sras.add(md.run_accession)
             
         for ns in non_sras:
-            if ns is not [] and ns[0] not in seen_sras:
-                print(TAB.join(ns), file=outf) 
+            if ns and ns.run_accession not in seen_sras:
+                print(TAB.join(str(x) for x in ns), file=outf) 
      
 
-def expand_sra_query(query):
+def expand_sra_query(query, run_filter=None):
     # get the list of SRA accessions to be downloaded and metadata if available
     if not query:
         return [], {}
@@ -1850,12 +2497,7 @@ def expand_sra_query(query):
             return [], {}
         else:
             # Runs an actual Entrez query and returns the list of SRA accessions
-            sra_runs = sra_query(query)
-
-            metadata = dict()
-            for sr in sra_runs:
-                run_id = sr[0]
-                metadata[run_id] = sr
+            metadata, _ = sra_query_cached(query, run_filter)
 
             return list(metadata.keys()), metadata
     elif type(query) == list:
@@ -1876,15 +2518,18 @@ def check_for_sra_tools():
     return tools
 
 
-def download_sra_query(query, sra_dir):
-    sra_runs_list, metadata = expand_sra_query(query)
-    # print(f"runs: {sra_runs_list}, metadata: {metadata}")
-    res = download_sra_runs(sra_runs_list, sra_dir)
+def download_sra_query(inputs, query_key, sra_dir):
+    query = inputs.get(query_key+"_query")
+    run_filter = inputs.get(query_key+"_filter")
+    is_long_read = query_key == "long_reads"
+    sra_runs_list, metadata = expand_sra_query(query, run_filter)
+    #print(f"runs: {sra_runs_list}, metadata: {metadata}")
+    res = download_sra_runs(sra_runs_list, sra_dir, is_long_read)
     if res != 0:
         return res
 
     # update sra_reads yaml file with the map from SRA accession
-    # to list of fasta files downloaded for this accession
+    # to list of fasta files downloaded for this accession.
     existing_fasta_files = glob.glob(os.path.join(sra_dir, '*.fasta'))
 
     sra_runs_fn = os.path.join(sra_dir, SRA_RUNS_FILE)
@@ -1907,6 +2552,9 @@ def download_sra_query(query, sra_dir):
         else:
             sra_metadata_dict = {}
         sra_metadata_dict.update(metadata)
+        # Convert SraMetadata to list for YAML serialization
+        for k, v in metadata.items():
+            sra_metadata_dict[k] = list(v) if isinstance(v, SraMetadata) else v
         with open(sra_metadata_fn, 'w') as f:
             yaml.dump(sra_metadata_dict, f)
             f.flush()
@@ -1925,7 +2573,9 @@ def download_sra_query(query, sra_dir):
     return 0
 
 
-def download_sra_runs(sra_runs_list, sra_dir):
+def download_sra_runs(sra_runs_list, sra_dir, is_long_read=False):
+    read_type = 'long read' if is_long_read else 'short read'
+    print(f"RNA-seq {read_type} query returned {len(sra_runs_list)} SRA runs")
     if len(sra_runs_list) == 0:
         return 0
     # check which fasta files are already there and should not be redownloaded
@@ -1934,9 +2584,11 @@ def download_sra_runs(sra_runs_list, sra_dir):
     existing_sras = set(map(find_sra_name, existing_fasta_files))
     sra_list = list(filter(lambda x : x not in existing_sras, sra_runs_list))
     if len(sra_list) == 0:
+        print(f"All SRA runs for {read_type} are already downloaded")
         return 0
     #write the sra_list to be downloaded in file
     Path(sra_dir).mkdir(parents=True, exist_ok=True)
+    number_of_files_before = len([entry for entry in os.listdir(sra_dir) if os.path.isfile(os.path.join(sra_dir, entry))])
     tools = check_for_sra_tools()
     for sra in sra_list:
         print(f"Downloading {sra}")
@@ -1957,6 +2609,8 @@ def download_sra_runs(sra_runs_list, sra_dir):
                 res = err.returncode
         if res != 0:
             return res
+    number_of_files_after = len([entry for entry in os.listdir(sra_dir) if os.path.isfile(os.path.join(sra_dir, entry))])
+    print(f"{number_of_files_after - number_of_files_before} files downloaded for {read_type}")
     return 0
 
 
@@ -1994,7 +2648,13 @@ def download_offline_data(args):
             print(f"Downloading SRA")
         return 0
     os.makedirs(args.local_cache, exist_ok=True)
-    download_egapx_ftp_data(args.local_cache, args.data_version)
+    download_egapx_data(args.local_cache, args.data_version, args.ftp)
+    # Set the global cache directory so load_version_map can find the manifest
+    global user_cache_dir
+    user_cache_dir = args.local_cache
+    # Load the version map to populate data_version_cache so that subsequent
+    # taxonomy lookups can find the local database instead of calling the API
+    load_version_map(args.data_version)
     if args.filename:
         run_inputs = repackage_inputs(yaml.safe_load(open(args.filename, 'r')))
         if args.output:
@@ -2006,34 +2666,203 @@ def download_offline_data(args):
             print(reads_msg, end='')
             return 1
         inputs = run_inputs['input']
-        short_reads_query = inputs.get('short_reads_query', '')
-        long_reads_query  = inputs.get('long_reads_query', '')
         sra_res = 0
         if check_for_sra_tools():
-            res = download_sra_query(short_reads_query, sra_dir)
-            if res != 0:
-                return res
-            res = download_sra_query(long_reads_query, sra_dir)
-            if res != 0:
-                return res
-        elif short_reads_query or long_reads_query:
+            for query_key in ['short_reads', 'long_reads']:
+                res = download_sra_query(inputs, query_key, sra_dir)
+                if res != 0:
+                    return res
+        elif inputs.get('short_reads_query') or inputs.get('long_reads_query'):
             print("Warning: neither fasterq-dump nor fastq-dump is installed in path")
             sra_res = 1
-        # Download BUSCO lineage
-        # It uses taxonomy information which is loaded by now in previous
-        # stage, so to minimize taxonomy service usage we set cache directory
-        # global variable
-        global user_cache_dir
-        user_cache_dir = args.local_cache
-        download_busco_lineage_set(args.local_cache)
-        if 'busco_lineage' in inputs:
-            busco_lineage = inputs['busco_lineage']
-        else:
-            busco_lineage = get_busco_lineage(inputs['taxid'])
-        print(f"Downloading BUSCO lineage {busco_lineage}")
-        download_busco_lineage(args.local_cache, busco_lineage)
+
+        # Download BUSCO lineage if needed.
+        ensure_busco_lineage_for_inputs(args.local_cache, inputs)
         return sra_res
     return 0
+
+
+def _cache_target_for_url(url, cache_dir):
+    parsed = urlparse(url)
+    path = parsed.path.lstrip('/')
+    root_prefix = FTP_EGAP_ROOT_PATH.strip('/') + '/'
+    if parsed.netloc == FTP_EGAP_SERVER and path.startswith(root_prefix):
+        rel = path[len(root_prefix):]
+        return os.path.join(cache_dir, rel)
+    base_name = os.path.basename(parsed.path.rstrip('/')) or 'downloaded_input'
+    digest = hashlib.sha1(url.encode('utf-8')).hexdigest()[:12]
+    return os.path.join(cache_dir, 'staging', digest, base_name)
+
+
+def _find_cached_foreign_path(url, cache_dir):
+    """Return cached local path for a foreign URL if present, else empty string."""
+    preferred = _cache_target_for_url(url, cache_dir)
+    if os.path.exists(preferred):
+        return preferred
+
+    # Backward compatibility for files downloaded before cache staging migration.
+    parsed = urlparse(url)
+    base_name = os.path.basename(parsed.path.rstrip('/')) or 'downloaded_input'
+    digest = hashlib.sha1(url.encode('utf-8')).hexdigest()[:12]
+    legacy = os.path.join(cache_dir, 'user_inputs', digest, base_name)
+    if os.path.exists(legacy):
+        return legacy
+
+    return ''
+
+
+def convert_value_for_cache_download(value, key, strict, cache_dir, download_plan=None, allow_download=True):
+    """Convert paths to local-cache targets and collect remote download plan."""
+    def _leaf(v, key_name, strict_mode):
+        if not isinstance(v, str) or v == '':
+            return v
+
+        scheme = _get_uri_scheme(v)
+        if allow_download and scheme in {'http', 'https', 'ftp', 's3'}:
+            local_target = _cache_target_for_url(v, cache_dir)
+            if download_plan is not None:
+                download_plan.append({
+                    'source': v,
+                    'target': local_target,
+                    'key': key_name,
+                    'scheme': scheme,
+                    'foreign': True,
+                })
+            return local_target
+
+        if scheme:
+            # Keep cloud URIs as-is.
+            return v
+
+        if not os.path.exists(v):
+            if strict_mode:
+                raise OSError(ENOENT, f"File for parameter '{key_name}' doesn't exist", v)
+            return v
+        return os.path.abspath(v)
+
+    return _convert_nested_paths(value, key, strict, _leaf)
+
+
+def convert_paths_for_cache_download(run_inputs, cache_dir):
+    """Convert path-like inputs to local cache paths and return remote download plan."""
+    download_plan = []
+    _apply_path_converters(
+        run_inputs,
+        input_converter=lambda v, k, s: convert_value_for_cache_download(
+            v, k, s, cache_dir,
+            download_plan=download_plan,
+            allow_download=True,
+        ),
+        output_converter=lambda v, k, s: convert_value_for_cache_download(
+            v, k, s, cache_dir,
+            download_plan=None,
+            allow_download=False,
+        ),
+    )
+    return _dedupe_transfer_plan(download_plan)
+
+
+def ensure_taxonomy_data(cache_dir, use_ftp=False):
+    """Download taxonomy subtree required for lineage queries into local cache."""
+    taxonomy_db_rel = get_versioned_path("taxonomy", "taxonomy.sqlite3")
+    taxonomy_db_local = os.path.join(cache_dir, taxonomy_db_rel)
+    if os.path.exists(taxonomy_db_local):
+        return
+
+    taxonomy_rel_dir = os.path.dirname(taxonomy_db_rel)
+    if verbosity >= VERBOSITY_DEFAULT:
+        print(f"Downloading taxonomy data {taxonomy_rel_dir}")
+    if use_ftp:
+        ftpd = FtpDownloader()
+        ftpd.connect(FTP_EGAP_SERVER)
+        ftpd.download_ftp_dir(f"{FTP_EGAP_ROOT_PATH}/{taxonomy_rel_dir}", os.path.join(cache_dir, taxonomy_rel_dir))
+    else:
+        downloader = HttpsDownloader(verbosity=verbosity)
+        downloader.download_dir(taxonomy_rel_dir, os.path.join(cache_dir, taxonomy_rel_dir))
+
+
+def download_needed_data(args):
+    """Download only run-required data to local cache for offline execution."""
+    if not args.local_cache:
+        print("Local cache not set, please use -lc option")
+        return 1
+    if not args.filename:
+        print("Input file must be set for --download-needed mode")
+        return 1
+
+    if args.dry_run:
+        print("Download-needed dry run")
+        return 0
+
+    os.makedirs(args.local_cache, exist_ok=True)
+
+    # Keep manifest/version map behavior compatible with full download mode.
+    manifest, effective_data_version = download_data_manifest(args.data_version)
+    if args.data_version != effective_data_version:
+        print(f"For replicating this run use --data-version {effective_data_version}")
+    write_data_manifest_to_cache(args.local_cache, manifest, args.data_version, effective_data_version)
+    args.data_version = effective_data_version
+
+    effective_data_version, err_msg = load_version_map(args.data_version)
+    if err_msg:
+        print(err_msg)
+        return 1
+
+    # Taxonomy must be available before expanding parameters that rely on lineage.
+    ensure_taxonomy_data(args.local_cache, args.ftp)
+
+    # Activate cache only after taxonomy is present, so downstream lineage calls
+    # use local DB and avoid throttled remote fallbacks.
+    global user_cache_dir
+    user_cache_dir = args.local_cache
+
+    run_inputs = repackage_inputs(yaml.safe_load(open(args.filename, 'r')))
+    if args.output:
+        run_inputs['output'] = args.output
+    if int(args.ortho_taxid) > 0:
+        run_inputs['input']['ortho'] = {'taxid': int(args.ortho_taxid)}
+
+    if not expand_and_validate_params(run_inputs):
+        return 1
+
+    # Process reads and SRA in the same way as full download mode.
+    res, reads_msg = prepare_reads(run_inputs, args.force, for_download=True)
+    if not res:
+        print(reads_msg, end='')
+        return 1
+
+    inputs = run_inputs['input']
+    sra_dir = os.path.abspath(os.path.join(args.local_cache, SRA_DOWNLOAD_FOLDER))
+    sra_res = 0
+    if check_for_sra_tools():
+        for query_key in ['short_reads', 'long_reads']:
+            res = download_sra_query(inputs, query_key, sra_dir)
+            if res != 0:
+                return res
+    elif inputs.get('short_reads_query') or inputs.get('long_reads_query'):
+        print("Warning: neither fasterq-dump nor fastq-dump is installed in path")
+        sra_res = 1
+
+    # Handle BUSCO exactly as in full download mode.
+    ensure_busco_lineage_for_inputs(args.local_cache, inputs)
+
+    # Convert paths of processed config and cache remote sources into -lc.
+    try:
+        download_plan = convert_paths_for_cache_download(run_inputs, args.local_cache)
+    except OSError as e:
+        print(F"{e.strerror}: {e.filename}")
+        return 1
+
+    ok, stage_msg = stage_inputs_bulk(download_plan, verbosity=args.verbosity)
+    if not ok:
+        print(stage_msg)
+        return 1
+    if args.verbosity >= VERBOSITY_VERBOSE and stage_msg:
+        print(stage_msg)
+
+    if args.verbosity > VERBOSITY_QUIET:
+        print(reads_msg, end='')
+    return sra_res
 
 
 def main(argv):
@@ -2052,7 +2881,9 @@ def main(argv):
     if not args.data_version:
         args.data_version = DATA_VERSION
     
-    if args.download_only:
+    if args.download_only or args.download_needed:
+        if args.download_needed:
+            return download_needed_data(args)
         return download_offline_data(args)
     
     # Command line overrides manifest input
@@ -2166,8 +2997,17 @@ def main(argv):
         return 1
     
     cache_dir = get_cache_dir()
-    if cache_dir:
+    if inputs.get('busco_lineage_download'):
+        ok, resolved_busco_dir, err = resolve_busco_lineage_download_path(inputs['busco_lineage_download'], busco_lineage)
+        if not ok:
+            print(f"ERROR: {err}")
+            return 1
+        inputs['busco_lineage_download'] = resolved_busco_dir
+        if args.verbosity >= VERBOSITY_VERBOSE:
+            print(f"Using BUSCO lineage from input path: {resolved_busco_dir}")
+    elif cache_dir:
         busco_lineage_dir_name = os.path.join(cache_dir, 'busco_downloads', 'lineages', busco_lineage)
+        print(f"Checking for BUSCO lineage {busco_lineage} in cache at {busco_lineage_dir_name}")
         if check_busco_lineage(cache_dir, busco_lineage):
             inputs['busco_lineage_download'] = busco_lineage_dir_name
         else:
@@ -2185,12 +3025,25 @@ def main(argv):
         print(reads_msg, end='')
         return 1
 
-    # Convert inputs to absolute paths
+    # Convert inputs to absolute paths and stage foreign inputs.
     try:
-        convert_paths(run_inputs)
+        staging_plan = convert_paths_for_executor(
+            run_inputs,
+            executor=args.executor,
+            workdir=workdir,
+            staging_dir=args.staging_dir,
+        )
     except OSError as e:
         print(F"{e.strerror}: {e.filename}")
         return 1
+
+    if not args.dry_run:
+        ok, stage_msg = stage_inputs_bulk(staging_plan, verbosity=args.verbosity)
+        if not ok:
+            print(stage_msg)
+            return 1
+        if args.verbosity >= VERBOSITY_VERBOSE and stage_msg:
+            print(stage_msg)
 
     # Add to default task parameters, if input file has some task parameters they will override the default
     task_params = merge_params(task_params, run_inputs)
@@ -2278,7 +3131,12 @@ def main(argv):
         try:
             env = os.environ.copy()
             env['NXF_WORK'] = workdir
-            print(nf_cmd)
+            #print(nf_cmd)
+            
+            with open(args.output+"/nextflow/nf.config.out", "w") as f:
+                config_cmd = ['nextflow', '-C', config_file, 'config' ]
+                x = subprocess.run(config_cmd, stdout=f,check=True, text=True, env=env)
+
             subprocess.run(nf_cmd, check=True, capture_output=(args.verbosity <= VERBOSITY_QUIET), text=True, env=env)
         except subprocess.CalledProcessError as e:
             print(e.stderr)

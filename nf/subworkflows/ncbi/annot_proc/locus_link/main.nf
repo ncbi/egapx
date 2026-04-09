@@ -39,6 +39,8 @@ workflow locus_link {
 
 
 process run_locus_link {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path best_refseq_prot_hit
         path orthologs

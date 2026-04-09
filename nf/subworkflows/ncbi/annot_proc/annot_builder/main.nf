@@ -19,6 +19,8 @@ workflow annot_builder {
 }
 
 process annot_builder_run {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path gencoll_asn,     name: 'inp/*'
         path genome_asn,      name: 'inp/*'

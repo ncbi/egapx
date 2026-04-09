@@ -3,7 +3,6 @@ nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
 
-split_count=16
 bdb_dir = "blast__db"
 shrd_mft_name="blastdb.mft"    // this must be shared with gc_makeblastdb
 mft_name = "$bdb_dir/$shrd_mft_name"
@@ -29,6 +28,8 @@ workflow tblastn_align {
 
 
 process gpx_qsubmit {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path genome_asn
         path proteins_asn
@@ -38,7 +39,7 @@ process gpx_qsubmit {
         path "job.*"
         env lines_per_file
     script:
-        njobs=split_count
+        njobs=task.ext.split_jobs
     """
     mkdir -p tmp/asncache
     auto_prime_cache.py -cache tmp/asncache/ -i ${proteins_asn} -oseq-ids ./prot_ids -split-sequences
@@ -77,9 +78,10 @@ process gpx_qsubmit {
 }
 
 
-process run_tblastn_wnode {
-    label 'huge_job'
+process run_tblastn_wnode {  //TODO wnode 
     label 'long_job'
+    label 'multi_node'
+    label 'med_mem'
     input:
         path genome_asn
         path proteins_asn
@@ -91,13 +93,6 @@ process run_tblastn_wnode {
         path "blast/*", emit: "blast"
     script:
     """
-    njobs=`wc -l <$jobs`
-    if [ \$njobs -lt 16 ]; then
-        threads=\$njobs
-    else
-        threads=16
-    fi
-    
     mkdir -p tmp/interim
     mkdir -p tmp/asncache
 
@@ -106,7 +101,7 @@ process run_tblastn_wnode {
     filename=\$(basename -- "$jobs")
     extension="\${filename##*.}"
     (( start_job_id = ((10#\$extension) * $lines_per_file) + 1 ))
-    EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace tblastn_wnode -asn-cache tmp/asncache/ -workers \$threads -start-job-id \$start_job_id -input-jobs $jobs -nogenbank -O tmp/interim $parameters
+    tblastn_wnode -asn-cache tmp/asncache/ -workers ${task.ext.threads} -start-job-id \$start_job_id -input-jobs $jobs -nogenbank -O tmp/interim $parameters
     
     mkdir -p blast
     cat tmp/interim/* > blast/tblastn_wnode.${task.index}.gpx-job.asnb
@@ -121,6 +116,8 @@ process run_tblastn_wnode {
 
 
 process gpx_make_outputs {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "gpx_inputs/*"
         val parameters

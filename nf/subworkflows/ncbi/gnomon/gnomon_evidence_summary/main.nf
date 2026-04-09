@@ -23,11 +23,11 @@ workflow gnomon_evidence_summary {
         String gpx_qdump_params =  merge_params("-unzip '*'", parameters, 'gpx_qdump')
         //gn_models_slices|view
         scaffolds = generate_scaffolds(evidence, evidence_slices, gn_models, gn_models_slices)
-        (jobs, lines_per_file) = gpx_qsubmit(scaffolds, gn_models, gpx_qsubmit_params)
+        (jobs, lines_per_file) = gpx_qsubmit(scaffolds, genome_asn, protein_asn, gn_models, gpx_qsubmit_params)
         report_parts = gnomon_report(jobs.flatten(), evidence, evidence_slices, gn_models, gn_models_slices, sra_exons, sra_exons_slices, genome_asn, protein_asn, lines_per_file, taxid, gnomon_report_params)
         gpx_qdump(report_parts.collect(), gpx_qdump_params)
         (report, quality_report) = create_reports(gpx_qdump.out.report)
-        gnomon_summary(report, quality_report,  gn_models, genome_asn, gnomon_summary_params)
+        gnomon_summary(report, quality_report,  gn_models, genome_asn, protein_asn, gnomon_summary_params)
     emit:
         gnomon_evidence_summary = gnomon_summary.out.gnomon_evidence_summary
         gnomon_quality_report = quality_report
@@ -36,6 +36,8 @@ workflow gnomon_evidence_summary {
 
 
 process generate_scaffolds {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path evidence
         path evidence_slices
@@ -110,6 +112,8 @@ if __name__=="__main__":
 }
 
 process create_reports {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path reports
     output:
@@ -155,20 +159,23 @@ if __name__=="__main__":
 
 
 process gpx_qsubmit {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path scaffolds
+        path genome_asn
+        path protein_asn
         path gn_models
         val params
     output:
         path "job.*"
         env lines_per_file
     script:
-        njobs=16
+        njobs=task.ext.split_jobs
     """
     echo $scaffolds > scaffolds.mft
     mkdir -p tmp/asncache
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${gn_models} -oseq-ids spids -split-sequences
-
     gpx_qsubmit $params -ids-manifest scaffolds.mft -o jobs -nogenbank -asn-cache tmp/asncache/  -keep-input-order
     total_lines=\$(wc -l <jobs)
     (( lines_per_file = (total_lines + ${njobs} - 1) / ${njobs} ))
@@ -195,6 +202,8 @@ process gpx_qsubmit {
 }
 
 process gnomon_report {
+    label 'multi_node'
+    label 'med_mem'
     input:
         path jobs
         path evidence
@@ -212,20 +221,14 @@ process gnomon_report {
         path "output/*", emit: "output"
     script:
     """
-    njobs=`wc -l <$jobs`
-    if [ \$njobs -lt 16 ]; then
-        threads=\$njobs
-    else
-        threads=16
-    fi  
     mkdir -p tmp/asncache
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${gn_models} -oseq-ids spids1 -split-sequences
     prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry  -i ${genome_asn} -oseq-ids spids2 -split-sequences
     if [[ -n "${protein_asn}" ]]; then
         if [[ `head -c4 ${protein_asn}` == "Seq-" ]]; then
-            prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry -i ${protein_asn} -oseq-ids spids3 -split-sequences
+            prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry -i ${protein_asn} -oseq-ids spids3 #-split-sequences
         else
-            prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry -i ${protein_asn} -oseq-ids spids3 -split-sequences
+            prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry -i ${protein_asn} -oseq-ids spids3 #-split-sequences
         fi
     fi
 
@@ -242,7 +245,7 @@ process gnomon_report {
         echo "\${f}_true" >> input_slices.mft
     done
     mkdir -p tmp/interim
-    gnomon_report $params -nogenbank -egapx  -input-slices input_slices.mft -asn-cache tmp/asncache/  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -O tmp/interim
+    gnomon_report $params -nogenbank -egapx  -input-slices input_slices.mft -asn-cache tmp/asncache/  -start-job-id \$start_job_id -workers ${task.ext.threads} -input-jobs $jobs -O tmp/interim
 
     mkdir -p output
     cat tmp/interim/* > output/gnomon_report.${task.index}.gpx-job.asnb
@@ -257,11 +260,14 @@ process gnomon_report {
 
 
 process gnomon_summary {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path gnomon_report
         path gnomon_quality_report
         path gn_models
         path genome_asn
+        path protein_asn
         val params
     output:
         path "All.gnomon_evidence_*", emit: "gnomon_evidence_summary"
@@ -271,6 +277,13 @@ process gnomon_summary {
     mkdir -p tmp/asncache
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${gn_models} -oseq-ids spids2 -split-sequences
     prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry  -i ${genome_asn} -oseq-ids spids -split-sequences
+    if [[ -n "${protein_asn}" ]]; then
+        if [[ `head -c4 ${protein_asn}` == "Seq-" ]]; then
+            prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry -i ${protein_asn} -oseq-ids spids3 #-split-sequences
+        else
+            prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry -i ${protein_asn} -oseq-ids spids3 #-split-sequences
+        fi
+    fi
     echo "${gn_models.join('\n')}" > models.mft
     gnomon_summary -egapx -models models.mft -nogenbank $params  -input $gnomon_report -quality $gnomon_quality_report -asn-cache tmp/asncache/  -output All.gnomon_evidence_@.txt
 
@@ -291,6 +304,8 @@ process gnomon_summary {
 
 
 process gpx_qdump {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "inputs/*"
         val params
@@ -299,7 +314,7 @@ process gpx_qdump {
     script:
     """
     gpx_qdump $params -input-path inputs -o reports.txt 
-    touch reports.txt 
+    touch reports.txt
     """
     stub:
     """

@@ -17,6 +17,8 @@ workflow minimap2_index {
 
 
 process run_minimap2_index {
+    label 'multi_cpu'
+    label 'med_mem'
     input:
         path genome
         val index_params
@@ -29,6 +31,7 @@ process run_minimap2_index {
     """
     stub:
     """
-    touch index.mmi
+    mkdir -p output
+    touch output/index.mmi
     """
 }

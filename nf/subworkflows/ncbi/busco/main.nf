@@ -23,6 +23,8 @@ workflow busco {
 
 
 process run_busco {
+    label 'multi_cpu'
+    label 'med_mem'
     input:
         path proteins
         val  lineage

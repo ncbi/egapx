@@ -30,6 +30,8 @@ workflow gnomon_wnode {
 
 
 process gpx_qsubmit {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path scaffolds
         path chains
@@ -39,7 +41,7 @@ process gpx_qsubmit {
         path "job.*"
         env lines_per_file
     script:
-        njobs=16
+        njobs=task.ext.split_jobs
     """
     echo $scaffolds | tr ' ' '\\n' > scaffolds.mft
     for file in $chains_slices; do
@@ -49,30 +51,32 @@ process gpx_qsubmit {
     done
     gpx_qsubmit $params -ids-manifest scaffolds.mft -slices-manifest chains_slices.mft -o jobs
     total_lines=\$(wc -l <jobs)
-    (( lines_per_file = (total_lines + ${njobs} - 1) / ${njobs} ))
+    (( lines_per_file = (\$total_lines + ${njobs} - 1) / ${njobs} ))
     echo total_lines=\$total_lines, lines_per_file=\$lines_per_file
     # split -l\$lines_per_file jobs job. -da 3
     # Use round robin to distribute jobs across nodes more evenly
-    if [ \$total_lines -lt $njobs ]; then
+    if [ \$total_lines -lt ${njobs} ]; then
         effective_njobs=\$total_lines
     else
-        effective_njobs=$njobs
+        effective_njobs=${njobs}
     fi
     split -nr/\$effective_njobs jobs job. -da 3
     """
     stub:
-        njobs=16
+        njobs=task.ext.split_jobs
     """
-    for i in {1..$njobs}; do
+    for i in {1..${njobs}}; do
         echo j.\${i} >> jobs
     done
-    split -nr/$njobs jobs job. -da 3
+    split -nr/${njobs} jobs job. -da 3
     lines_per_file=10
     """
 }
 
 
 process annot {
+    label 'multi_node'
+    label 'med_mem'
     input:
         path jobs
         path chains // used for staging chain files, referred from jobs
@@ -87,12 +91,6 @@ process annot {
         path "output/*"
     script:
     """
-    njobs=`wc -l <$jobs`
-    if [ \$njobs -lt 16 ]; then
-        threads=\$njobs
-    else
-        threads=16
-    fi
     mkdir -p tmp
     lds2=tmp/indexed_lds
     if [ -n "$softmask" ]; then
@@ -113,7 +111,7 @@ process annot {
     # the output files for gpx_make_outputs. We add the job file numeric
     # extension as a prefix to the filename.
     mkdir -p tmp/interim
-    annot_wnode $params -nogenbank -lds2 \$lds2  -start-job-id \$start_job_id -workers \$threads -input-jobs $jobs -param $hmm_params -O tmp/interim || true
+    annot_wnode $params -nogenbank -lds2 \$lds2  -start-job-id \$start_job_id -workers ${task.ext.threads} -input-jobs $jobs -param $hmm_params -O tmp/interim || true
     mkdir -p output
     cat tmp/interim/* > output/annot_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp
@@ -127,6 +125,8 @@ process annot {
 
 
 process gpx_qdump {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "inputs/*"
         val params

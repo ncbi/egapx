@@ -48,6 +48,8 @@ emit:
 // TODO: Consume asn_cache produced by upstream by setup_genome
 process prime_cache
 {
+    label 'single_cpu'
+    label 'small_mem'
 input:
     path "inp/fasta.fa"
 
@@ -66,8 +68,8 @@ script:
 // ----------------------------------------------------------------------------
 process cmsearch_wnode
 {
-    label 'huge_job'
-
+    label 'multi_node'  //this is not determined yet. subject to change
+    label 'med_mem'
     tag "${batch_id}" // NB: can only contain a number, otherwise egapx.py will crash in collect_logs()
                       // by incorrectly parsing task-name string that ends with a tag suffix.
     
@@ -91,6 +93,9 @@ script:
     // or do we need an explicit path?
     """
     mkdir -p out
+    if [[ -n \${TMPDIR-} ]]; then
+        mkdir -p \${TMPDIR} || true
+    fi
 
     #temporarily for development for faster turn-around
     #cat inp/seqids.tsv | tail -n 2 > tmp_seqids.tsv
@@ -166,6 +171,8 @@ stub:
 // ----------------------------------------------------------------------------
 process gpx_qdump_and_annot_merge
 {
+    label 'single_cpu'
+    label 'small_mem'
 input:
     path "inp/asn_cache"
     path 'inp/gpx/*'

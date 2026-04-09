@@ -12,7 +12,7 @@ workflow align_sort_sa {
         alignments  //path: alignment files
         parameters      // Map : extra parameter and parameter update
     main:
-        default_params = ""
+        default_params = " -nogenbank "
         effective_params = merge_params(default_params, parameters, 'align_sort')
         run_align_sort(genome_asn, proteins_asn, alignments, effective_params)
 
@@ -22,6 +22,8 @@ workflow align_sort_sa {
 
 
 process run_align_sort {
+    label 'multi_cpu'
+    label 'large_mem'
     input:
         path genome, stageAs: 'indexed/genome.asnt'
         path proteins, stageAs: 'indexed/proteins.asnt'

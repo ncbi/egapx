@@ -27,6 +27,8 @@ workflow bam_bin_and_sort {
 
 process calc_assembly_sizes {
     label 'large_disk'
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path bam_files
     output:
@@ -40,9 +42,12 @@ process calc_assembly_sizes {
         chunk_size=`wc -c \${s} | awk '{print \$1}'`
         # Select assembly name
         s=\$(basename \${s})
-        regex="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
-        if [[ \$s =~ \$regex ]]; then
+        regex1="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
+        regex2="^(unpacked)_(genome)[.]bam\$"
+        if [[ \$s =~ \$regex1 ]]; then
             assembly="\${BASH_REMATCH[1]}"
+        elif [[ \$s =~ \$regex2 ]]; then
+            assembly="GCF_030936135.1_lcl"
         else
             echo "Malformed BAM name, \${s}"
             exit 1
@@ -66,6 +71,8 @@ process calc_assembly_sizes {
 
 
 process bam_bin {
+    label 'multi_node'
+    label 'small_mem'
     input:
         path sorted_bam
         path sorted_bam_index
@@ -79,14 +86,24 @@ process bam_bin {
         output = "output"
     """
     #!/usr/bin/env bash
+    if [[ -n \${TMPDIR-} ]]; then
+        mkdir -p \${TMPDIR} || true
+    fi
+    if [[ -n \${TEMP-} ]]; then
+        mkdir -p \${TEMP} || true
+    fi
 
     mkdir -p $output
     echo "bam file : ${sorted_bam}, index file : ${sorted_bam_index}"
     s=\$(basename ${sorted_bam})
-    regex="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
-    if [[ \$s =~ \$regex ]]; then
+    regex1="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
+    regex2="^(unpacked)_(genome)[.]bam\$"
+    if [[ \$s =~ \$regex1 ]]; then
         assembly="\${BASH_REMATCH[1]}"
         run="\${BASH_REMATCH[2]}"
+    elif [[ \$s =~ \$regex2 ]]; then
+        assembly="GCF_030936135.1_lcl"
+        run="testing"
     else
         echo "Malformed BAM name, ${sorted_bam}"
         exit 1
@@ -113,10 +130,14 @@ process bam_bin {
     mkdir -p $output
     
     s=\$(basename ${sorted_bam})
-    regex="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
-    if [[ \$s =~ \$regex ]]; then
+    regex1="^(.+)-([^-]+)-Aligned[.]out[.]Sorted[.]bam\$"
+    regex2="^(unpacked)_(genome)[.]bam\$"
+    if [[ \$s =~ \$regex1 ]]; then
         assembly="\${BASH_REMATCH[1]}"
         run="\${BASH_REMATCH[2]}"
+    elif [[ \$s =~ \$regex2 ]]; then
+        assembly="GCF_030936135.1_lcl"
+        run="testing"
     else
         echo "Malformed BAM name, ${sorted_bam}"
         exit 1
@@ -130,6 +151,7 @@ process bam_bin {
 
 process merge_prepare {
     label 'large_disk'
+    label 'single_cpu'
     input:
         path runs
     output:
@@ -170,7 +192,8 @@ process merge_prepare {
 
 
 process merge {
-    label 'big_job'
+    label 'multi_node'
+    label 'small_mem'
     label 'large_disk'
     input:
         path merge_args

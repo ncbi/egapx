@@ -39,8 +39,7 @@ workflow orthology_plane {
         diamond_orthology(extract_products_from_models.out.prot_ids, prot_ref_ids , models, proteins_ref_asnb , task_params.get('diamond_orthology', [:]))
 
         // input side 1) gencoll asn from setup, genome_asn from setup, protein from gnomon_wnode.out, annotation it is from annotbuilder annot_files or accepts_asn
-        find_orthologs( gencoll_asn,  gencoll_ref_asn,  annot_files, fetch_ortholog_references.out.annot_file, diamond_orthology.out.alignments, [],
-                        models, proteins_ref_asnb , genome_asnb, genome_ref_asnb ,  task_params.get('find_orthologs', [:]))
+        find_orthologs( gencoll_asn,  gencoll_ref_asn,  annot_files, fetch_ortholog_references.out.annot_file, diamond_orthology.out.alignments, [], models, proteins_ref_asnb , genome_asnb, genome_ref_asnb, task_params.get('find_orthologs', [:]))
 
     emit:
         orthologs = find_orthologs.out.orthologs

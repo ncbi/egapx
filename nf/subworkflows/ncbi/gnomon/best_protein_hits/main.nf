@@ -29,6 +29,8 @@ workflow best_protein_hits {
 
 
 process run_protein_filter_replacement {
+    label 'multi_cpu'
+    label 'small_mem'
     input:
         path gnomon_prot_asn, stageAs: 'indexed/*'
         path swiss_prot_asn, stageAs: 'indexed/*'
@@ -39,18 +41,14 @@ process run_protein_filter_replacement {
         path "output/*"
     script:
     """
+    mkdir -p tmp
     mkdir -p tmp/asncache
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${gnomon_prot_asn} -oseq-ids /dev/null -split-sequences
     prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${swiss_prot_asn} -oseq-ids /dev/null -split-sequences
 
     mkdir -p ./output
-    align_sort $align_sort_params  -asn-cache tmp/asncache  -i ./input_alignments.asnb -o output/best_protein_hits.asnb
+    align_sort $align_sort_params -tmp tmp   -asn-cache tmp/asncache  -i ./input_alignments.asnb -o output/best_protein_hits.asnb
 
-    #align_filter $align_filter_params -asn-cache tmp/asncache  -i ./input_alignments.asnb -o - | align_sort -i - $align_sort_params -asn-cache tmp/asncache  -o - | align_pack -ifmt seq-align -i - -ofmt seq-align-set -o ./output/best_protein_hits.asnb 
-    ##align_filter $align_filter_params -asn-cache tmp/asncache  -i ./input_alignments.asnb -o ./t1.asnb 
-    ##align_sort -i ./t1.asnb $align_sort_params -asn-cache tmp/asncache  -o ./t2.asnb     
-    ##align_pack -ifmt seq-align -i ./t2.asnb -ofmt seq-align-set -o ./t3.asnb
-    ##cp ./t3.asnb ./output/best_protein_hits.asnb
     rm -rf tmp
     """
 

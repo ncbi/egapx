@@ -27,7 +27,8 @@ def get_effective_params(parameters, max_intron, cpus) {
 
 
 process run_star {
-    label 'big_job'
+    label 'multi_node'
+    label 'med_mem'
     label 'long_job'
     input:
         path seqid_list
@@ -53,8 +54,7 @@ process run_star {
 
         // For some executors (e.g. SGE) the task.cpus is not set correctly, they allocate correct number of threads through clusterOptions.
         // We use ext.cpus to pass the number of cpus here and use clusterOptions to allocate large enough instance
-        def cpus = task.cpus == 1 && task.ext.cpus ? task.ext.cpus : task.cpus
-        def effective_params = get_effective_params(parameters, max_intron, cpus)
+        def effective_params = get_effective_params(parameters, max_intron, task.ext.threads)
         if (params.verbose) {
             println("Effective STAR parameters: $effective_params")
         }
@@ -64,6 +64,12 @@ process run_star {
     lds2_indexer -source genome
     mkdir -p out
     mkdir -p wrkarea
+    if [[ -n \${TMPDIR-} ]]; then
+        mkdir -p \${TMPDIR} || true
+    fi
+    if [[ -n \${TEMP-} ]]; then
+        mkdir -p \${TEMP} || true
+    fi
     echo "<job query =\\\"lcl|${query_str}\\\" subject=\\\"$Star_Index\\\"></job>" > jobfile
     star=\$(which star-with-filter)
     samtools=\$(which samtools)
@@ -91,8 +97,7 @@ process run_star {
         def assembly=genome_file.baseName.toString().replaceFirst(/\.(fa(sta)?|asn[bt]?)$/, "")
 
         println("Assembly: ${assembly} sampleID: ${sampleID}, max_intron: ${max_intron}")
-        def cpus = task.cpus == 1 && task.ext.cpus ? task.ext.cpus : task.cpus
-        def effective_params = get_effective_params(parameters, max_intron, cpus)
+        def effective_params = get_effective_params(parameters, max_intron, task.ext.threads)
         println("Effective STAR parameters: $effective_params")
     """
     # NB: see GP-40504
