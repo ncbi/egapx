@@ -26,6 +26,8 @@ workflow sra_query  {
 
 
 process run_sra_query {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         val parameters
     output:

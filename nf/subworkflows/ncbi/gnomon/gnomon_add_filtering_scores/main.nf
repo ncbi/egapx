@@ -24,6 +24,8 @@ workflow gnomon_add_filtering_scores {
 }
 
 process gnomon_filter_models {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path naming_db_secondary_support
         path search_set_secondary_support

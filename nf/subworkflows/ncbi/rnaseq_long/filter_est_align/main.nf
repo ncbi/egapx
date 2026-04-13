@@ -19,6 +19,8 @@ workflow filter_est_align {
 
 
 process align_filter {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path align_asn, stageAs: 'indexed/*'
         val align_filter_params
@@ -27,9 +29,10 @@ process align_filter {
     script:
     name = align_asn.baseName
     """
+    mkdir -p tmp
     mkdir -p output
-    lds2_indexer -source ./indexed -db LDS2_Index
-    align_filter $align_filter_params -lds2 LDS2_Index -i ${align_asn} -o output/${name}.filtered_aln.asnb
+    lds2_indexer -source ./indexed -db tmp/LDS2_Index
+    align_filter $align_filter_params -lds2 tmp/LDS2_Index -i ${align_asn} -o output/${name}.filtered_aln.asnb
     """
     stub:
     name = align_asn.baseName
@@ -41,7 +44,8 @@ process align_filter {
 
 
 process align_sort {
-    label 'huge_job'
+    label 'single_cpu'
+    label 'large_mem'
     input:
         path align_asn, stageAs: 'indexed/*'
         val align_sort_params
@@ -52,8 +56,8 @@ process align_sort {
     """
     mkdir -p output
     mkdir -p tmp
-    lds2_indexer -source ./indexed -db LDS2_Index
-    align_sort -tmp tmp $align_sort_params -lds2 LDS2_Index -i ${align_asn} -o output/${name}.sorted_aln.asnb
+    lds2_indexer -source ./indexed -db tmp/LDS2_Index
+    align_sort -tmp tmp  $align_sort_params -lds2 tmp/LDS2_Index -i ${align_asn} -o output/${name}.sorted_aln.asnb
     rm -rf tmp
     """
     stub:

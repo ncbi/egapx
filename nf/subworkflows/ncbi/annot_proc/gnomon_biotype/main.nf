@@ -27,6 +27,8 @@ workflow gnomon_biotype {
 
 
 process run_gnomon_biotype {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path models_files
         path splices_files 

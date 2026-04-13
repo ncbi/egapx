@@ -38,6 +38,8 @@ workflow setup_ext_genome {
 
 
 process get_genome_info {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path input_genome_file, stageAs: 'src/*'
         path organelles
@@ -79,9 +81,9 @@ process get_genome_info {
     
     first_char=""
     if [[ ${need_zcat} == true ]]; then
-        first_char=`zcat $input_genome_file | head -c 1 || true`
+        first_char=`zcat $input_genome_file | head -c 100 | grep -oP "[[:print:]]" | head -c 1 || true`
     else
-        first_char=`head -c 1 $input_genome_file`
+        first_char=`head -c 100 $input_genome_file | grep -oP "[[:print:]]" | head -c 1`
     fi
 
     if [[ \${first_char} == ">" ]]; then
@@ -195,6 +197,8 @@ workflow setup_ext_proteins {
 
 
 process convert_proteins {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path fasta_proteins_file, stageAs: 'src/*'
         val  localize_ids
@@ -220,17 +224,20 @@ process convert_proteins {
     """
     mkdir -p ${asn_dir}
     mkdir -p ${fasta_dir}
-    ${source_cmd} ${fasta_proteins_file}${fiter_taxons_cmd}${lcl_id_cmd} > ${out_fasta}
+    mkdir -p tmp/interim
+    ${source_cmd} ${fasta_proteins_file}${fiter_taxons_cmd}${lcl_id_cmd} > tmp/interim/out.faa
     for f in user_src/*; do
         [ -e "\$f" ] || continue
         if [[ \$f == *.gz ]]; then
-            zcat \$f >> ${out_fasta}
+            zcat \$f >> tmp/interim/out.faa
         else
-            cat \$f >> ${out_fasta}
+            cat \$f >> tmp/interim/out.faa
         fi
     done
-    multireader -flags ParseRawID -out-format asn_text -input ${out_fasta} -output ${proteins_asn}
-    multireader -flags ParseRawID -out-format asn_binary -input ${out_fasta} -output ${proteins_asnb}
+    seqkit rmdup tmp/interim/out.faa -o ${out_fasta}
+    multireader -flags ParseRawID -out-format asn_text -input ${out_fasta} -output ${proteins_asn} -parse-mods
+    multireader -flags ParseRawID -out-format asn_binary -input ${out_fasta} -output ${proteins_asnb} -parse-mods
+    rm -rf tmp
     """
 
     stub:
@@ -269,6 +276,8 @@ workflow setup_long_reads {
 
 
 process rename_fasta_ids {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         tuple val(sampleID), path(fastx, stageAs: "reads/*")
         val  srr_id

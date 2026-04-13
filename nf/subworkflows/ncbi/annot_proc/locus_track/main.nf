@@ -43,6 +43,8 @@ workflow locus_track {
 
 
 process run_locus_track {
+    label 'multi_cpu'
+    label 'small_mem'
     input:
         path annotation 
         path gencoll_asn

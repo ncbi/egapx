@@ -19,6 +19,8 @@ workflow convert_summary_files {
 
 
 process run_convert_summary_files {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path report
         path quality_report

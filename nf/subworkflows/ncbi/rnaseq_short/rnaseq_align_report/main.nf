@@ -22,6 +22,8 @@ workflow rnaseq_align_report {
 
 
 process run_align_report {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path gencoll_asn
         path input_metadata

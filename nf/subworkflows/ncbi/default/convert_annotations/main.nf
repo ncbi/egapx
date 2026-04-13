@@ -22,6 +22,8 @@ workflow convert_annotations {
 
 
 process run_converter {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path asn_files, stageAs: 'asn_inputs/*'
         val  gff_params

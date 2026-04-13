@@ -23,7 +23,7 @@ EGAPx has dependencies in and outside of its execution path that include several
 **License:**
 See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
 
-![alt text](examples/EGAPx.diagram.png)
+![alt text](examples/images/EGAPx.diagram.png)
 
 # Contents 
 <!-- TOC -->
@@ -32,13 +32,14 @@ See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
 - [Installation and setup](#installation-and-setup)
 - [Input data format](#input-data-format)
   - [Running EGAPx with short RNA-seq reads](#running-egapx-with-short-rna-seq-reads)
-  - [Running EGAPx with short and long RNA-seq reads](#running-egapx-with-short-and-long-rna-seq-reads)
+  - [Running EGAPx with long RNA-seq reads](#running-egapx-with-long-rna-seq-reads)
   - [Protein aligner and protein evidence set selection](#protein-aligner-and-protein-evidence-set-selection)
   - [Noncoding RNA feature prediction](#noncoding-rna-feature-prediction)
 - [Input example](#input-example)
 - [Run EGAPx](#run-egapx)
-- [Test run](#test-run)
-- [Offline mode](#offline-mode)
+  - [CPU, memory, and executors configuration](#cpu-memory-and-executors-configuration)
+  - [Online mode](#online-mode)
+  - [Offline mode](#offline-mode)
 - [Output](#output)
 - [Interpreting Output](#interpreting-output)
 - [Intermediate files](#intermediate-files)
@@ -59,13 +60,13 @@ See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
 [Back to Top](#Contents)
 
 - Docker or Singularity  
-- AWS batch, UGE cluster, or a r6a.4xlarge machine (32 CPUs, 256GB RAM) 
+- AWS batch, SLURM/UGE cluster, or a r6a.4xlarge machine (32 CPUs, 256GB RAM) 
 - Nextflow v.23.10.1
-- Python v.3.9+ 
+- Python v.3.11+ 
 
 Notes:
-- General configuration for AWS Batch is described in the Nextflow documentation at https://www.nextflow.io/docs/latest/aws.html
-- See Nextflow installation at https://www.nextflow.io/docs/latest/getstarted.html
+- General configuration for AWS Batch is described in the Nextflow documentation at https://docs.seqera.io/nextflow/aws
+- See Nextflow installation at https://docs.seqera.io/nextflow/install
 
 ## Installation and setup
 [Back to Top](#Contents)
@@ -89,16 +90,11 @@ Input to EGAPx is in the form of a YAML file.
   ```
   genome: path to assembled genome in FASTA format
   taxid: NCBI Taxonomy identifier of the target organism 
-  short_reads: RNA-seq short reads data
   ```
   - See [here](#input-genome) for genome FASTA requirements/recommendations
   - You can obtain taxid from the [NCBI Taxonomy page](https://www.ncbi.nlm.nih.gov/taxonomy).
 
-- The following are _optional_ metadata configuration parameters:
-  - Locus tag prefix. One to 9-letter prefix to use for naming genes on this genome assembly. If an official locus tag prefix was already reserved from an INSDC organization (GenBank, ENA or DDBJ) for the given BioSample and BioProject pair, provide here. This is helpful if you want to use the final GFF3 file for studies prior to submission. Otherwise, use the default prefix 'egapxtmp', which can be updated later when preparing annotation files for [submission](#submitting-egapx-annotation-to-ncbi).
-  ```
-    locus_tag_prefix: egapxtmp 
-  ```
+- Running EGAPx with RNA-seq ([short reads](#running-egapx-with-short-rna-seq-reads), [long reads](#running-egapx-with-long-rna-seq-reads), [combination](#running-egapx-with-long-rna-seq-reads)) is highly recommended.
 
 ### Input genome
 [Back to Top](#Contents)
@@ -111,15 +107,22 @@ Input to EGAPx is in the form of a YAML file.
 ### Running EGAPx with short RNA-seq reads
 [Back to Top](#Contents)
 
-  - RNA-seq short reads data can be supplied in any one of the following ways:
+RNA-seq short reads data can be supplied from SRA accessions and/or from non-SRA data. If using both, SRA reads need to be downloaded locally first.
+- NCBI SRA datasets can be specified as an array:
+   ```
+   short_reads:
+     - SRR8506572
+     - SRR9005248
+   ```
 
+- To specify an SRA entrez query:
     ```
-    short_reads: [ nested list of read set names and paths, FASTA or FASTQ files]
-    short_reads: path_to_short_reads_list.txt
-    short_reads: [ array of SRA run IDs or Study IDs]
-    short_reads: SRA Entrez query
-    ```
-- If you are using local reads, the recommended input formatting is a nested list of read set names and paths or a list of read set names and paths in a separate file. For smaller RNA-seq datasets, you can follow the nested list format below. Here the filenames for the reads can be anything, but the set names for each set has to be unique. 
+    short_reads: txid43150[Organism] AND 50:350[ReadLength] AND (illumina[Platform] OR bgiseq[Platform]) AND biomol_rna[Properties]
+    ```   
+
+  **Note:** Some SRA entrez query can return a large number of SRA run id's. To prevent EGAPx from using a large number of SRA runs, please run the query first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and list it in the input yaml.
+
+- If you are using non-SRA reads, the recommended input formatting is a nested list of read set names and paths or a list of read set names and paths in a separate file. Reads from individual sequencing runs should be provided as separate files, never combined. For smaller RNA-seq datasets, you can follow the nested list format below. Here the filenames for the reads can be anything, but the set names for each set has to be unique. 
     ```
     short_reads:
      - - single_end_library_name1   # set name
@@ -148,27 +151,19 @@ Input to EGAPx is in the form of a YAML file.
     ```
     See `examples/input_D_farinae_small_reads.txt`) and `examples/input_D_farinae_small_readlist.yaml` for an example using this strategy.
 
-- NCBI SRA datasets can be specified as an array:
-   ```
-   short_reads:
-     - SRR8506572
-     - SRR9005248
-   ```
-   - If you provide an SRA Study ID, all the SRA run ID's belonging to that Study ID will be included in the EGAPx run.    
-
-- To specify an SRA entrez query:
+- If you are using both SRA and non-SRA data, SRA reads need to be downloaded locally first and provided as paths:
     ```
-    short_reads: txid43150[Organism] AND 50:350[ReadLength] AND (illumina[Platform] OR bgiseq[Platform]) AND biomol_rna[Properties]
+    SRRXXXXXXX path/to/SRRXXXXXXX_1.fq
+    SRRXXXXXXX path/to/SRRXXXXXXX_2.fq
+    peset1 path/to/pe1_reads_R1.fq
+    peset1 path/to/pe1_reads_R2.fq
     ```
 
-  **Note:** Some SRA entrez query can return a large number of SRA run id's. To prevent EGAPx from using a large number of SRA runs, please run the query first at the [NCBI SRA page](https://www.ncbi.nlm.nih.gov/sra). If there are too many SRA runs, then select a few of them and list it in the input yaml.
-
-
-### Running EGAPx with short and long RNA-seq reads
+### Running EGAPx with long RNA-seq reads
 [Back to Top](#Contents)
 
-- Optionally, you can also include long reads RNA-seq data from SRA or local files (FASTA or FASTQ, not BAM) using the same formatting structure for short reads, using the label `long_reads:`
-
+RNA-seq long reads data can be provided alone or in combination with short reads data. Long reads are supplied from SRA accessions and/or from non-SRA data (FASTA or FASTQ, not BAM). If using both, SRA reads need to be downloaded locally first.
+- Use the same formatting structure described above for short reads with the label `long_reads:`
   ```
   genome: path to assembled genome in FASTA format
   taxid: NCBI Taxonomy identifier of the target organism 
@@ -228,64 +223,135 @@ By default, EGAPx predicts ribosomal RNAs using the [Rfam](https://rfam.org/) da
       enabled: true
     ```
 
-## Input example
-[Back to Top](#Contents)
-
-- A test example YAML file `./examples/input_D_farinae_small.yaml` is included in the `egapx` folder. Here, the RNA-seq data is provided as paths to the reads FASTA files. These FASTA files are a sampling of the reads from the complete SRA read files to expedite testing. 
-
-
-  ```
-  genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCF/020/809/275/GCF_020809275.1_ASM2080927v1/GCF_020809275.1_ASM2080927v1_genomic.fna.gz
-  taxid: 6954
-  short_reads:
-    - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/data/Dermatophagoides_farinae_small/SRR8506572.1
-    - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/data/Dermatophagoides_farinae_small/SRR8506572.2
-    - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/data/Dermatophagoides_farinae_small/SRR9005248.1
-    - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/data/Dermatophagoides_farinae_small/SRR9005248.2
-  ```
-
-- First, test EGAPx on `./examples/input_D_farinae_small.yaml`, a dust mite, to make sure everything works. This example usually runs under 30 minutes depending upon resource availability. There are other examples you can try: `input_C_longicornis.yaml`, a green fly, and `input_Gavia_stellata.yaml`, a bird. These will take close to two hours.  You can prepare your input YAML file following these examples.
-
 ## Run EGAPx
 [Back to Top](#Contents)
 
+Based on Internet access from the submit/main node and worker nodes, EGAPx can be configured to run in [online](#online-mode) or [offline](#offline-mode) mode. To test the pipeline, an example YAML file `./examples/input_D_farinae_small.yaml` is included in the `egapx` folder. Here, the RNA-seq data is provided as paths to the reads FASTA files. These FASTA files are a sampling of the reads from the complete SRA read files to expedite testing. This example usually runs under 30 minutes depending upon resource availability.
+
+  ```
+  genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/020/809/275/GCA_020809275.1_ASM2080927v1/GCA_020809275.1_ASM2080927v1_genomic.fna.gz
+  taxid: 6954
+  short_reads:
+   - - SRR8506572
+     - - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/sample_data/Dermatophagoides_farinae_small/SRR8506572.1
+       - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/sample_data/Dermatophagoides_farinae_small/SRR8506572.2
+   - - SRR9005248
+     - - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/sample_data/Dermatophagoides_farinae_small/SRR9005248.1
+       - https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/sample_data/Dermatophagoides_farinae_small/SRR9005248.2
+  ```
+### Executors, memory, and CPU configuration
+[Back to Top](#Contents)
 
 - Run EGAPx for the first time to generate the config files so you can edit them:
   ```
-  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -o example_out
+  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e <executor> -w <workdir> -o <output>
   ```
-  - This will create a ./egapx_config directory containing the template config files.  
+  - This will create a `./egapx_config` directory containing the template config files.  
   - :warning: You'll need to edit these templates to suit your specific environment:
     - For AWS Batch execution, set up AWS Batch Service following the process [here](https://www.nextflow.io/docs/latest/aws.html). Then edit the value for `process.queue` in `./egapx_config/aws.config` file.
     - Some executors, e.g. `-e docker` and `-e singularity` default to running on a single node
     - For execution on the local machine you don't need to adjust anything.
 
-
-- You're now ready to run EGAPx with real data!
-  - For AWS Batch execution, replace temp_datapath with an existing S3 bucket.
-  - For local execution, use a local path for `-w` 
-  ```
-  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e aws -w s3://temp_datapath/D_farinae -o example_out
-  ```
-    
     - use `-e aws` for AWS batch using Docker image
     - use `-e docker` for using Docker image
     - use `-e singularity` for using the Singularity image
     - use `-e biowulf_cluster` for Biowulf cluster using Singularity image
     - use `-e slurm` for using SLURM in your HPC.
         - Note that for this option, you have to edit `./egapx_config/slurm.config` according to your cluster specifications.
-    - type `python3 ui/egapx.py  -h ` for the help menu 
+    - type `python3 ui/egapx.py  -h ` for the help menu
 
+- The default memory and CPU configuration is at `./egapx_config/process_resources.config`
+- The default configuration has tested successfully for: 
+  - 1.7 Gb snake genome with 15 short-read SRA datasets (~600M reads, ~60Gb) and 2 long-read SRA datasets (~30M reads, ~80Gb)
+  - 3 Gb human genome with 10 short-read SRA datasets (~740M reads, ~75Gb)
 
-     
+- EGAPx automatically configures CPU resources based on the parameters below, which you can customize for your compute environment:
+  ```
+  params.threads = 16
+  params.nodes = 16
+  params.num_cpus_per_node = 96
+  ```
 
+- EGAPx Nextflow processes are assigned labels with memory limits that should work for most annotations. Large genomes and/or large RNA-seq datasets may require editing the resource allocation for egapx. Examples you can try:
+  ```
+    withLabel: 'small_mem' { 
+        memory = 8.GB
+    }
+    withLabel: 'med_mem' {
+        memory = 64.GB --> change to 128.GB 
+    }
+    withLabel: 'large_mem' { 
+        memory = 128.GB --> change to 200.GB
+    }
+  ```
+- Exceptionally large genomes may require additional parameter specifications. EGAPx annotation on a large 40 Gb lungfish genome required the following changes in `./ui/assets/default_task_params.yaml`, with the change in miniprot potentially reducing alignment sensitivity:
+  ```
+  star_index:
+    STAR: --runThreadN 8 --limitGenomeGenerateRAM 150000000000 --genomeSAsparseD 3
+  miniprot:
+    split_proteins: -n 25000
+    miniprot: -p 0.4 --outs=0.4 -M 3
+  ```
 
-## Test run
+### Online mode
+[Back to Top](#Contents)
+
+In online mode, support files are automatically staged before EGAPx pipeline execution.
+
+- After configuration files are finalized, run the EGAPx pipeline:
+  ```
+  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e <executor> -w <workdir> -o <output>
+  ```
+
+### Offline mode
+[Back to Top](#Contents)
+
+In offline mode, you download the necessary files from NCBI FTP and the BUSCO website using `egapx.py` script, then use the path of the downloaded folder in the run command. This mode is useful if your Internet access is more restricted or you want reproducible runs with controlled local data.
+
+- Download all EGAPx support files, relevant BUSCO lineage files, and SRA data:
+  ```
+  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -dl -lc local_cache
+  ```
+- Alternatively, download only relevant EGAPx support files and BUSCO lineage files, and SRA data:
+  ```
+  python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -dn -lc local_cache
+  ``` 
+- Download subsampled SRA data:
+  ```
+  mkdir local_cache/sra_dir
+  curl https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/sample_data/Dermatophagoides_farinae_small/SRR8506572.[1-2] -o 'local_cache/sra_dir/SRR8506572_#1.fasta'
+  curl https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/sample_data/Dermatophagoides_farinae_small/SRR9005248.[1-2] -o 'local_cache/sra_dir/SRR9005248_#1.fasta'
+  ```
+- Edit the EGAPx YAML:
+  ```
+  genome: https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/020/809/275/GCA_020809275.1_ASM2080927v1/GCA_020809275.1_ASM2080927v1_genomic.fna.gz
+  taxid: 6954
+  short_reads:
+   - - SRR8506572
+     - - /path/to/local_cache/sra_dir/SRR8506572_1.fasta
+       - /path/to/local_cache/sra_dir/SRR8506572_2.fasta
+   - - SRR9005248
+     - - /path/to/local_cache/sra_dir/SRR9005248.1.fasta
+       - /path/to/local_cache/sra_dir/SRR9005248.2.fasta
+  ```
+- Run EGAPx:
+  ```
+  python3 ui/egapx.py edit_D_farinae_small.yaml -e <executor> -w <workdir> -o <output> -lc local_cache
+  ```
+- For EGAPx runs using full SRA datasets, if [fasterq-dump](https://github.com/ncbi/sra-tools/wiki/HowTo:-fasterq-dump) is available and the input yaml file has a list of SRA runs, `egapx.py` will download those SRA runs too and place them at `../local_cache`. When you start your egapx run using the same input yaml, and provide the local cache, it will look for those SRA run files in the local cache directory. Alternately, you can download full SRA runs yourself using the commands below, then edit the EGAPx YAML to provide paths to the local files:
+  ```
+  prefetch SRR8506572
+  prefetch SRR9005248
+  fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\$ac.\$si.\$ri" --fasta -O sradir/  ./SRR8506572
+  fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\$ac.\$si.\$ri" --fasta -O sradir/  ./SRR9005248
+  ```
+
+## Output
 [Back to Top](#Contents)
 
 A successful EGAPx run will produce a completion message and basic feature [statistics](#interpreting-output):
 ```
-$ python3 ui/egapx.py examples/input_D_farinae_small.yaml -e aws -o example_out -w s3://temp_datapath/D_farinae
+python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e <executor> -w <workdir> -o <output>
 
 Completed at: 01-Dec-2025 10:50:32
 Duration    : 1h 22m 12s
@@ -293,63 +359,7 @@ CPU hours   : 6.3
 Succeeded   : 134
 ```
 
-## Offline mode
-[Back to Top](#Contents)
-
-If you do not have internet access from your cluster, you can run EGAPx in offline mode. To do this, you would first pull the Singularity image, then download the necessary files from NCBI FTP and the BUSCO website using `egapx.py` script, and then finally use the path of the downloaded folder in the run command. Here is an example of how to download the files and execute EGAPx in the Biowulf cluster. 
-
-
-- Download the Singularity image:
-  ```
-  rm egap*sif
-  singularity cache clean
-  singularity pull docker://ncbi/egapx:0.5.0
-  ```
-
-- Clone the repo:
-  ```
-  git clone https://github.com/ncbi/egapx.git
-  cd egapx
-  ```
-
-- Download EGAPx related files, relevant BUSCO lineage files, and SRA data:
-  ```
-  python3 ui/egapx.py  input.yaml -dl -lc ../local_cache
-  ```
-  The relevant BUSCO lineage files are downloaded based on the taxid in the input yaml. If the input yaml file has a list of SRA runs, `egapx.py` will download those SRA runs too and place them at `../local_cache`. When you start your egapx run using the same input yaml, and provide the local cache, it will look for those SRA run files in the local cache directory. 
-
-- Alternate way to download SRA reads:
-  ```
-  prefetch SRR8506572
-  prefetch SRR9005248
-  fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\$ac.\$si.\$ri" --fasta -O sradir/  ./SRR8506572
-  fasterq-dump --skip-technical --threads 6 --split-files --seq-defline ">\$ac.\$si.\$ri" --fasta -O sradir/  ./SRR9005248
-
-  ```
-  You should see downloaded files inside the 'sradir' folder":
-  ```
-  ls  sradir/
-  SRR8506572_1.fasta  SRR8506572_2.fasta  SRR9005248_1.fasta  SRR9005248_2.fasta
-  ```
-  Now edit the file paths of SRA reads files in `examples/input_D_farinae_small.yaml` to include the above SRA files. 
-
-- Run `egapx.py` first to edit the `biowulf_cluster.config`:
-  ```
-  ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
-  echo "process.container = '/path_to_/egapx_0.5.0.sif'"  >> egapx_config/biowulf_cluster.config
-  ```
-
-- Run `egapx.py`:
-  ```
-  ui/egapx.py examples/input_D_farinae_small.yaml -e biowulf_cluster -w dfs_work -o dfs_out -lc ../local_cache
-
-  ```
-
-
-## Output
-[Back to Top](#Contents)
-
-Look at the output in the out diectory (`example_out`) that was supplied in the command line. 
+The output directory contains several files: 
 
 | File                                     | Description                                    |
 |------------------------------------------|------------------------------------------------|
@@ -604,7 +614,6 @@ You are ready to run `prepare_submission`. See below for full list of required/o
 | `--linkage-evidence`              | table2asn `-l` argument (default: paired-ends). https://www.ncbi.nlm.nih.gov/genbank/wgs_gapped/ |
 | `--out-dir`                   | output directory |
 | *Optional*| 
-| `--annotation-provider`                   | Organization submitting the annotation (default: GenBank submitter) |
 | `--submission-comment`                   | table2asn `-y` argument https://www.ncbi.nlm.nih.gov/genbank/table2asn/ |
 | `--name-cleanup-rules-file`                   | Two-column TSV of search/replace regexes to be applied to product and gene names |
 | `--source-quals`                   | table2asn `-j` argument. https://www.ncbi.nlm.nih.gov/genbank/mods_fastadefline/ |
@@ -614,10 +623,10 @@ Command:
 
 ```
 # Using Docker:
-alias prepare_submission='docker run --rm -i --volume="$PWD:$PWD" --workdir="$PWD" ncbi/egapx:0.5.0 prepare_submission'
+alias prepare_submission='docker run --rm -i --volume="$PWD:$PWD" --workdir="$PWD" ncbi/egapx:0.5.1 prepare_submission'
 
 # Using Singularity or Apptainer:
-alias prepare_submission='singularity exec --cleanenv --bind "$PWD:$PWD" --pwd "$PWD" docker://ncbi/egapx:0.5.0 prepare_submission'
+alias prepare_submission='singularity exec --cleanenv --bind "$PWD:$PWD" --pwd "$PWD" docker://ncbi/egapx:0.5.1 prepare_submission'
 
 # Invoke the app:
 prepare_submission --egapx-annotated-genome-asn annotated_genome.asn --submission-template-file template.sbt --bioproject-id PRJNA# --src-file source-table.txt --assembly-data-structured-comment-file genome.asm --linkage-evidence paired-ends --out-dir out
@@ -638,7 +647,6 @@ Note: ensure that all input files are under `$PWD`; otherwise add additional `--
 | `--gc-assembly-id`                   | GenBank assembly identifier `GCA_#`  |
 | `--out-dir`                   | output directory |
 | *Optional*| 
-| `--annotation-provider`                   | Organization submitting the annotation (default: GenBank submitter) |
 | `--submission-comment`                   | table2asn `-y` argument. https://www.ncbi.nlm.nih.gov/genbank/table2asn/ |
 | `--name-cleanup-rules-file`                   | Two-column TSV of search/replace regexes to be applied to product and gene names |
 | `--seq-id-mapping-file`                   | Two-column TSV of (submitter-seq-id, gca-acc.ver). Required when annotation is on submitter local seq-ids. Requires `-gc-assembly-id` |
@@ -654,23 +662,35 @@ prepare_submission --egapx-annotated-genome-asn annotated_genome.asn --submissio
 - The submission ASN.1 is in `out_dir/annotated_genome.seq-submit.sqn`
 
 - Review validation output: `out_dir/annotated_genome.seq-submit.val`
-  - Check for any ERROR/REJECT/FATAL issues.
-  - See https://www.ncbi.nlm.nih.gov/genbank/genome_validation/ for further information.
-  - Any issues are unexpected.
-  - Please follow up with the EGAPx team if there are issues labeled as ERROR/REJECT/FATAL.
+  - Check for any ERROR/REJECT/FATAL issues
+    - See https://www.ncbi.nlm.nih.gov/genbank/genome_validation/ for further information
+    - Please make a GitHub issue if there are unexpected issues labeled as ERROR/REJECT/FATAL
 
 - Review discrepancy report: `out_dir/annotated_genome.seq-submit.dr`
-  - Check for any issues labeled as ERROR/FATAL. Some can safely be ignored
-    - "Error: valid [SEQ_DESCR.BadStrucCommInvalidFieldName] Diploid is not a valid field" is a false positive error.
-  - See https://www.ncbi.nlm.nih.gov/genbank/asndisc/#evaluating_the_output for further information.
-  - Any issues are unexpected.
-  - Please follow up with the EGAPx team if there are issues labeled as FATAL
-    (and not in one of the categories that is only considered FATAL for bacteria submissions).
+  - Check for any issues labeled as ERROR/FATAL
+    - See https://www.ncbi.nlm.nih.gov/genbank/asndisc/#evaluating_the_output for further information
+    - FATALs named  “BACTERIAL_*” can safely be ignored
+    - "Error: valid [SEQ_DESCR.BadStrucCommInvalidFieldName] Diploid is not a valid field" is is a false positive and can be ignored
+    - Please make a GitHub issue if there are other ERROR/FATAL labels not listed above
 
 - Submit through the [NCBI Genome Submission Portal](https://submit.ncbi.nlm.nih.gov/subs/genome/)
-  - Include a comment in the portal
-    - indicate this is an EGAPx annotation
-    - if adding annotation to an existing assembly, include the WGS accession number of the assembly being updated.
+  - If submtting a single genome choose the single genome option
+  - If submitting a batch of multiple genomes, contact genomes@ncbi.nlm.nih.gov prior to submission to assist with submission configuration
+  - Tab 2: GENERAL INFO
+    - Include your existing BioProject and BioSample information
+![alt text](examples/images/Submissions_GeneralInfo_BioProject.png)
+    - Check box "Genome Assembly structured comment is in the contig .sqn file(s) 
+![alt text](examples/images/Submissions_GeneralInfo_Genomeinfo.png) 
+    - If this is an update indicate this and provide the WGS accession number of the existing genome
+![alt text](examples/images/Submissions_GeneralInfo_Update.png)
+    - In comments to NCBI staff, indicate this is an EGAPx annotation
+![alt text](examples/images/Submissions_GeneralInfo_Comment.png)
+  - Tab 6: FILES
+    - Upload your annotation file in the indicated area
+![alt text](examples/images/Submissions_Files.png)
+  - Tab 7: ASSIGNMENT
+    - Click the "NO" radio button for "Do any sequences belong to a chromosome?" even if you do have chromosomes. The information will not be lost, it just avoids the need to re-add this information in the submission portal
+![alt text](examples/images/Submissions_Assignment.png)
   - For additional information about genome submissions see https://www.ncbi.nlm.nih.gov/genbank/genomesubmit/
   - Please contact genomes@ncbi.nlm.nih.gov if there are issues with the submission process
 

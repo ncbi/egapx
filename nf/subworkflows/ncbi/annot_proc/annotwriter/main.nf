@@ -14,6 +14,8 @@ workflow annotwriter {
 
 
 process run_annotwriter {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path accept_asn_file
     output:

@@ -40,6 +40,8 @@ workflow prepare_masks {
 
 
 process gp_annot_format{
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path cmsearch_annot
     output:

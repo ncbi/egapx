@@ -5,12 +5,10 @@ nextflow.enable.dsl=2
 include { merge_params } from '../../utilities'
 include { run_align_sort }  from '../../default/align_sort_sa/main.nf'
 
-split_count=16
-
 
 workflow chainer_wnode {
     take:
-        alignments
+        sorted_alignments
         hmm_params
         evidence_denylist
         gap_fill_allowlist
@@ -20,24 +18,12 @@ workflow chainer_wnode {
         proteins
         parameters  // Map : extra parameter and parameter update
     main:
-        String input_sorting = parameters.get('input_aligns_sort', '')
-        def sort_aligns = alignments
-        if (!input_sorting.contains("presorted")) {
-            String align_sort_params = ""
-            if (input_sorting.contains("merge_only")) {
-                align_sort_params = "-merge"
-            }
-            align_sort_params += " -ifmt seq-align -compression none -k 'subject,subject_start,-subject_end' -rnaseq-uniq -strip-alignment "
-            // print(align_sort_params).
-            sort_aligns = run_align_sort([], [], alignments, align_sort_params).collect()
-            //sort_aligns = align_sort(alignments, align_sort_params)
-        }
         String submit_chainer_params =  merge_params("-minimum-abut-margin 20 -separate-within-introns", parameters, 'submit_chainer')
         String chainer_wnode_params = merge_params("", parameters, 'chainer_wnode')
         String gpx_make_outputs_params =  merge_params("-default-output-name chains -slices-for affinity -sort-by affinity", parameters, 'gpx_make_outputs')
         
-        def (jobs, lines_per_file) = generate_jobs(sort_aligns, submit_chainer_params)
-        def collected = run_chainer(jobs.flatten(), sort_aligns, hmm_params, evidence_denylist, gap_fill_allowlist, scaffolds, trusted_genes, genome, proteins, lines_per_file, chainer_wnode_params) | collect
+        def (jobs, lines_per_file) = generate_jobs(sorted_alignments, submit_chainer_params)
+        def collected = run_chainer(jobs.flatten(), sorted_alignments, hmm_params, evidence_denylist, gap_fill_allowlist, scaffolds, trusted_genes, genome, proteins, lines_per_file, chainer_wnode_params) | collect
 
         run_gpx_make_outputs(collected, gpx_make_outputs_params)
     emit:
@@ -50,6 +36,8 @@ workflow chainer_wnode {
 
 
 process generate_jobs {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path sort_aligns
         val params
@@ -57,7 +45,7 @@ process generate_jobs {
         path "job.*"
         env lines_per_file
     script:
-        njobs=split_count
+        njobs=task.ext.split_jobs
     """
     #!/usr/bin/env bash
     # generate_jobs $sort_aligns $params -output chains -output-slices chains_slices -output-evidence evidence -output-evidence-slices evidence_slices
@@ -75,18 +63,21 @@ process generate_jobs {
     split -nr/\$effective_njobs jobs job. -da 3
     """
     stub:
+    njobs=task.ext.split_jobs
     """
-    for i in {1..$split_count}; do
+    for i in {1..$njobs}; do
         echo "<job query =\\\"lcl|${sort_aligns}:\${i}-\${i}\\\"></job>" >> jobs
     done
-    split -nr/$split_count jobs job. -da 3
+    split -nr/$njobs jobs job. -da 3
     lines_per_file=10
     """
 }
 
 
-process run_chainer {
+process run_chainer {   
     label 'long_job'
+    label 'multi_node'
+    label 'med_mem'
     input:
         path job
         path alignments
@@ -114,10 +105,14 @@ process run_chainer {
     
     mkdir -p tmp
     # make the local LDS of the genomic and protein (if present) sequences
-    lds2_indexer -source indexed -db tmp/LDS2
+    ##lds2_indexer -source indexed -db tmp/LDS2
+    mkdir -p tmp/asncache/
+    auto_prime_cache.py -cache tmp/asncache/ -i ${genome} -oseq-ids spidsg -split-sequences
+    auto_prime_cache.py -cache tmp/asncache/ -i ${proteins_asn} -oseq-ids spidsp -split-sequences
+
 
     mkdir -p tmp/interim
-    chainer_wnode $params -start-job-id \$start_job_id  -workers 32 -input-jobs ${job} -O tmp/interim -nogenbank -lds2 tmp/LDS2 -evidence-denylist-manifest evidence_denylist.mft -gap-fill-allowlist-manifest gap_fill_allowlist.mft -param ${hmm_params} -scaffolds-manifest scaffolds.mft -trusted-genes-manifest trusted_genes.mft
+    chainer_wnode $params -start-job-id \$start_job_id  -workers ${task.ext.threads} -input-jobs ${job} -O tmp/interim -nogenbank -asn-cache tmp/asncache/ -evidence-denylist-manifest evidence_denylist.mft -gap-fill-allowlist-manifest gap_fill_allowlist.mft -param ${hmm_params} -scaffolds-manifest scaffolds.mft -trusted-genes-manifest trusted_genes.mft
     mkdir -p output
     cat tmp/interim/* > output/chainer_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp
@@ -132,6 +127,8 @@ process run_chainer {
 
 
 process run_gpx_make_outputs {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "gpx_inputs/*"
         val params
@@ -145,13 +142,13 @@ process run_gpx_make_outputs {
     """
     ls -1 gpx_inputs/* > gpx_inputs.mft
     mkdir -p output
-    gpx_make_outputs $params -input-manifest gpx_inputs.mft -output output/@.#.out.gz -output-manifest output/@.mft -slices-manifest output/@_slices.mft -num-partitions $split_count
+    gpx_make_outputs $params -input-manifest gpx_inputs.mft -output output/@.#.out.gz -output-manifest output/@.mft -slices-manifest output/@_slices.mft -num-partitions ${task.ext.split_jobs}
     """
     stub:
     """
     mkdir -p output
     echo ${files}
-    for i in {1..$split_count}; do
+    for i in {1..${task.ext.split_jobs} }; do
         touch output/chains.\$i.out.gz
         touch output/chains.\$i.out.gz.slices
         touch output/evidence.\$i.out.gz

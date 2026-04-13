@@ -22,6 +22,8 @@ workflow extract_products_from_models {
 
 
 process run_extract_products_from_models {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path models
         val parameters

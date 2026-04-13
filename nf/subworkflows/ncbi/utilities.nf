@@ -109,6 +109,8 @@ def merge_params(default_params, parameters, section_name)
 
 
 process clean_fasta_ids {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path fasta_in
     output:
@@ -139,6 +141,8 @@ process clean_fasta_ids {
 
 
 process multireader {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path fasta_file
         val parameters
@@ -162,6 +166,8 @@ process multireader {
 
 
 process convert_mask{
+    label 'single_cpu'
+    label 'med_mem'
     input:
         path mask
         val name
@@ -172,7 +178,7 @@ process convert_mask{
     """
     mkdir -p output
     echo "${mask}" > mask.mft
-    convert_mask -input-manifest mask.mft  -o output/${name}.asnb  $parameters -nogenbank
+    convert_mask -input-manifest mask.mft -o output/${name}.asnb $parameters -nogenbank
     """
     stub:
     """
@@ -183,6 +189,8 @@ process convert_mask{
 
 
 process combine_blast_db{
+    label 'single_cpu'
+    label 'small_mem'
     input:
         //path contam_mask
         //path rmask_data

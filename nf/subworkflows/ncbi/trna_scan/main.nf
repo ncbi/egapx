@@ -30,6 +30,8 @@ emit:
 // TODO: Consume asn_cache produced by upstream by setup_genome
 process prime_cache
 {
+    label 'single_cpu'
+    label 'small_mem'
 input:
     path "inp/fasta.fa"
 
@@ -49,10 +51,12 @@ script:
 // ----------------------------------------------------------------------------
 process trnascan_wnode
 {
+    label 'multi_node'
+    label 'small_mem'
+
     tag "${batch_id}" // NB: can only contain a number, otherwise egapx.py will crash in collect_logs()
                       // by incorrectly parsing task-name string that ends with a tag suffix.
     
-    ext.trnascan_params = "-X 55 -Q -b -q"
 input:
     path "inp/asn_cache"
     path "inp/seqids.tsv"
@@ -65,6 +69,7 @@ output:
     path "out/${batch_id}.gpx-job.asnb"
 
 script:
+    def trnascan_params = task.ext?.trnascan_params ?: "-X 55 -Q -b -q"
     """
     mkdir -p out
 
@@ -77,7 +82,7 @@ script:
         --work-dir=./var                                                \\
         --out-file=out/${batch_id}.gpx-job.asnb                         \\
         trnascan_wnode                                                  \\
-            ${task.ext.trnascan_params} -tRNAscan \$(which tRNAscan-SE) \\
+            ${trnascan_params} -tRNAscan \$(which tRNAscan-SE) \\
     """
 stub:
     """
@@ -90,7 +95,8 @@ stub:
 // ----------------------------------------------------------------------------
 process trnascan_dump
 {
-    ext.trnascan_dump_params = "-X 55"
+    label 'single_cpu'
+    label 'small_mem'
 
 input:
     path "inp/asn_cache"
@@ -100,12 +106,13 @@ output:
     path "out/trnascan.asnb", emit: trnascan_annots
 
 script:
+    def trnascan_dump_params = task.ext?.trnascan_dump_params ?: "-X 55"
     """
     set -exuo pipefail
 
     mkdir -p out var
     gpx_qdump -input-path ./inp/gpx/ -sort-by job-id -unzip '*' |
-        trnascan_dump -oasn out/trnascan.asnb -ostruc var/struc.tar.gz ${task.ext.trnascan_dump_params}
+        trnascan_dump -oasn out/trnascan.asnb -ostruc var/struc.tar.gz ${trnascan_dump_params}
     """
 
 stub:

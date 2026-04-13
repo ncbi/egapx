@@ -5,7 +5,8 @@ include { merge_params } from '../../utilities'
 
 
 process build_index {
-    label 'big_job'
+    label 'multi_cpu'
+    label 'med_mem'
     input:
         path genome_file
         val parameters

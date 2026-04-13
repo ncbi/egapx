@@ -23,6 +23,8 @@ workflow bam2asn {
 process convert {
     label 'long_job'
     label 'large_disk'
+    label 'multi_node'
+    label 'small_mem'
     input:
         path in_bam
         path strandedness
@@ -41,8 +43,14 @@ process convert {
         exit 0
     fi
     mkdir -p tmp/sam
+    if [[ -n \${TMPDIR-} ]]; then
+        mkdir -p \${TMPDIR} || true
+    fi
+    if [[ -n \${TEMP-} ]]; then
+        mkdir -p \${TEMP} || true
+    fi
+
     lds2_indexer -source genome/ -db tmp/LDS2
-    # EXCEPTION_STACK_TRACE_LEVEL=Warning DEBUG_STACK_TRACE_LEVEL=Warning DIAG_POST_LEVEL=Trace
     sam2asn $conv_param -pseudo-run-accessions $sra_metadata -refs-local-by-default  -nogenbank -lds2 tmp/LDS2 -tmp-dir tmp/sam -align-counts "${prefix}.align_counts.txt" -o "${prefix}.align.asnb.gz" -strandedness $strandedness -input $in_bam -samtools-path \$samtools
     rm -rf
     """

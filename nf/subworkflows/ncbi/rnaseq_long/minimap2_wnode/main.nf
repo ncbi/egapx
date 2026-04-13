@@ -32,7 +32,229 @@ workflow minimap2 {
 }
 
 
+workflow minimap2_fasta {
+    take:
+        genome_fasta
+        genome_index // minimap2 index
+        gencoll
+        reads       // channel: FASTA file pairs (may or may not be pre-split)
+        max_intron  // max intron length
+        parameters  // Map : extra parameter and parameter update
+    main:
+        // Convert single-value queue channels to value channels so they can be reused
+        def genome_fasta_val = genome_fasta.first()
+        def genome_index_val = genome_index.first()
+        def gencoll_val = gencoll.first()
+        
+        def split_reads = parameters.get('split', 0) as int
+        
+        // Optionally split files if split parameter is provided and > 1
+        if (split_reads > 1) {
+            split_result = split_fasta_files(reads, split_reads)
+            // Emit individual files with computed job_id: part_number + (end - 1) * num_parts
+            // Capture split_reads in a final variable for closure
+            final int num_parts = split_reads
+            split_individual = split_result.flatMap { sra, files_1, files_2 ->
+                def list_1 = files_1 instanceof List ? files_1.sort() : (files_1 ? [files_1] : [])
+                def list_2 = files_2 instanceof List ? files_2.sort() : (files_2 ? [files_2] : [])
+                
+                def result = []
+                // .1. files: job_id = part_number (end=1)
+                for (int idx = 0; idx < list_1.size(); idx++) {
+                    result.add([sra, list_1[idx], idx + 1])
+                }
+                // .2. files: job_id = part_number + num_parts (end=2)
+                for (int idx = 0; idx < list_2.size(); idx++) {
+                    result.add([sra, list_2[idx], idx + 1 + num_parts])
+                }
+                return result
+            }
+            individual_files = split_individual
+        } else {
+            // Process file pairs directly - handle both (sra, files) and (sra, files_1, files_2) tuples
+            // For pre-split files (from fetch_sra_fasta), extract part number from filename
+            individual_files = reads.flatMap { tuple_data ->
+                def sra = tuple_data[0]
+                def files_1, files_2
+                
+                // Handle both 2-element and 3-element tuple structures
+                if (tuple_data.size() >= 3) {
+                    // (sra, files_1, files_2) from fetch_sra_fasta
+                    files_1 = tuple_data[1] instanceof List ? tuple_data[1] : (tuple_data[1] ? [tuple_data[1]] : [])
+                    files_2 = tuple_data[2] instanceof List ? tuple_data[2] : (tuple_data[2] ? [tuple_data[2]] : [])
+                } else {
+                    // (sra, files) - single file or list of files
+                    def all_files = tuple_data[1] instanceof List ? tuple_data[1] : [tuple_data[1]]
+                    files_1 = all_files.findAll { f -> f.getName() =~ /[._]1[._]/ || !(f.getName() =~ /[._]2[._]/) }
+                    files_2 = all_files.findAll { f -> f.getName() =~ /[._]2[._]/ }
+                }
+                
+                // Helper to extract part number from filename like "SRR_1.part_001.fasta.gz"
+                def extractPartNumber = { fname ->
+                    def matcher = fname =~ /\.part_(\d+)\./
+                    if (matcher) {
+                        return matcher[0][1] as int
+                    }
+                    return 1  // default for non-split files
+                }
+                
+                def list_1 = files_1.sort()
+                def list_2 = files_2.sort()
+                def num_parts = Math.max(list_1.size(), list_2.size())
+                // If single file per tuple (from fetch_sra_fasta pre-split), get num_parts from filename
+                if (num_parts == 1 && list_1.size() == 1) {
+                    def fname = list_1[0].getName()
+                    if (fname =~ /\.part_(\d+)\./) {
+                        // This is a pre-split file, use part number directly
+                        def part_num = extractPartNumber(fname)
+                        def job_id = fname =~ /[._]2[._]/ ? part_num + 16 : part_num  // Assume 16 parts for _2 offset
+                        return [[sra, list_1[0], job_id]]
+                    }
+                }
+                if (num_parts == 1 && list_2.size() == 1) {
+                    def fname = list_2[0].getName()
+                    if (fname =~ /\.part_(\d+)\./) {
+                        def part_num = extractPartNumber(fname)
+                        return [[sra, list_2[0], part_num + 16]]  // _2 files get offset
+                    }
+                }
+                if (num_parts == 0) num_parts = 1
+                
+                def result = []
+                // _1 files: job_id = part_number (end=1)
+                for (int idx = 0; idx < list_1.size(); idx++) {
+                    def part_num = extractPartNumber(list_1[idx].getName())
+                    result.add([sra, list_1[idx], part_num])
+                }
+                // _2 files: job_id = part_number + num_parts (end=2)
+                for (int idx = 0; idx < list_2.size(); idx++) {
+                    def part_num = extractPartNumber(list_2[idx].getName())
+                    result.add([sra, list_2[idx], part_num + num_parts])
+                }
+                return result
+            }
+        }
+        // individual_files.view { "individual_files: $it" }
+        alignments = minimap2_wnode_fasta(genome_fasta_val, genome_index_val, gencoll_val, individual_files, max_intron, parameters)
+        gpx_qdump(alignments.collect())
+    emit:
+        alignments = gpx_qdump.out.alignments
+}
+
+
+process split_fasta_files {
+    label 'single_cpu'
+    label 'small_mem'
+    input:
+        tuple val(sampleID), path(fasta_rna_files, stageAs: "reads/*")
+        val split_parts
+    output:
+        // Output patterns: .1. files (required) and .2. files (optional for paired-end)
+        tuple val(sampleID), path('output/*.1.*', arity: '1..*'), path('output/*.2.*', arity: '0..*')
+    script:
+    """
+    mkdir -p output
+    
+    # Rename files to use .1. and .2. convention if they use _1 and _2
+    for f in reads/*; do
+        [ -e "\$f" ] || continue
+        case "\$f" in
+            *_1.*) newname=\$(echo "\$f" | sed 's/_1\\./.1./'); mv "\$f" "\$newname" ;;
+            *_2.*) newname=\$(echo "\$f" | sed 's/_2\\./.2./'); mv "\$f" "\$newname" ;;
+        esac
+    done
+    
+    # For files without .1. or .2. (single-end), rename to .1. convention
+    for f in reads/*; do
+        [ -e "\$f" ] || continue
+        base=\$(basename "\$f")
+        # Skip if already has .1. or .2. in name
+        if [[ "\$base" == *.1.* ]] || [[ "\$base" == *.2.* ]]; then
+            continue
+        fi
+        # Handle compression extensions
+        comp_ext=""
+        name="\$base"
+        if [[ "\$name" == *.gz ]]; then
+            comp_ext=".gz"
+            name="\${name%.gz}"
+        elif [[ "\$name" == *.zst ]]; then
+            comp_ext=".zst"
+            name="\${name%.zst}"
+        fi
+        ext="\${name##*.}"
+        stem="\${name%.*}"
+        newname="\${stem}.1.\${ext}\${comp_ext}"
+        mv "reads/\$base" "reads/\$newname"
+    done
+    
+    # Split each file - seqkit handles compressed input automatically
+    # Use .gz extension to force gzip-compressed output (seqkit preserves format extension)
+    for f in reads/*; do
+        [ -e "\$f" ] || continue
+        seqkit split2 -p ${split_parts} -O output --extension .gz "\$f"
+    done
+    """
+    stub:
+    """
+    mkdir -p output
+    touch output/${sampleID}.1.part_001.fasta.gz
+    touch output/${sampleID}.2.part_001.fasta.gz
+    """
+}
+
+
+process minimap2_wnode_fasta {
+    maxForks 16
+    label 'long_job'
+    label 'multi_node'
+    label 'large_mem'
+    input:
+        path genome_fasta, stageAs: "genome/*"
+        path genome_index // minimap2 index
+        path gencoll
+        tuple val(sampleID), path(reads_fasta, stageAs: "reads/*"), val(start_job_id)
+        val max_intron
+        val parameters
+    output:
+        path "alignments/*", emit: "alignments"
+    script:
+        def nthreads=task.ext.threads
+        String minimap2_params = merge_params("-t ${nthreads}", parameters, "minimap2-params")
+        String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2_wnode") +
+                                        ' ' + merge_params("", parameters, "minimap2_wnode_fasta") +
+                                        ' -minimap2-params "' + minimap2_params + '"'
+    """
+    # Create job.xml inline - one job entry per read file
+    for f in reads/*; do
+        [ -e "\$f" ] || continue
+        printf '<job query="lcl|%s" subject="%s"></job>\\n' "\$f" "${genome_index}"
+    done > job.xml
+    
+    mkdir -p tmp/asncache
+    mkdir -p tmp/interim
+    prime_cache -cache tmp/asncache/ -ifmt fasta -i genome/* -split-sequences
+    minimap2_wnode -separate-output-by-run no -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id $start_job_id -input-jobs job.xml -nogenbank -asn-cache tmp/asncache -gc $gencoll -work-area tmp -O tmp/interim $minimap2_wnode_params
+    mkdir -p alignments
+    cat tmp/interim/* > alignments/minimap2_wnode.${task.index}.gpx-job.asnb
+    rm -rf tmp
+    """
+    stub:
+        String minimap2_params = merge_params("", parameters, "minimap2-params")
+        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2_wnode") +
+                                        ' ' + merge_params("", parameters, "minimap2_wnode_fasta") +
+                                        ' -minimap2-params "' + minimap2_params + '"'
+        println("Effective minimap2_wnode parameters: $minimap2_wnode_params")
+    """
+    mkdir -p alignments
+    touch alignments/minimap2_wnode.${task.index}.gpx-job.asnb
+    """
+}
+
+
 process gpx_qsubmit {
+    label 'gpx_submitter'
+    label 'small_mem'
     input:
         path genome_index
         tuple val(sampleID), path(fasta_rna_file, stageAs: "reads/*")
@@ -158,6 +380,8 @@ process gpx_qsubmit {
 process minimap2_wnode {
     maxForks 50
     label 'long_job'
+    label 'multi_node'
+    label 'med_mem'
     input:
         path genome_fasta, stageAs: "genome/*"
         path genome_index // minimap2 index, addressed indirectly via job file
@@ -169,19 +393,25 @@ process minimap2_wnode {
         path "alignments/*", emit: "alignments"
     script:
         String minimap2_params = merge_params("", parameters, "minimap2-params")
-        String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2_wnode") + ' -minimap2-params "' + minimap2_params + '"'
+        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2_wnode")
     """
     mkdir -p tmp/asncache
     mkdir -p tmp/interim
     prime_cache -cache tmp/asncache/ -ifmt fasta -i genome/* -split-sequences
-    minimap2_wnode -separate-output-by-run no -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id $start_job_id -input-jobs $job -nogenbank -lds2 $reads_LDS -asn-cache tmp/asncache -gc $gencoll -work-area tmp -O tmp/interim $minimap2_wnode_params
+
+    echo "$minimap2_params" > ./minimap2.params   # see if its empty
+    if [[ -s ./minimap2.params ]]; then
+        minimap2_wnode -separate-output-by-run no -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id $start_job_id -input-jobs $job -nogenbank -lds2 $reads_LDS -asn-cache tmp/asncache -gc $gencoll -work-area tmp -O tmp/interim $minimap2_wnode_params -minimap2-params \"$minimap2_params\"
+    else
+        minimap2_wnode -separate-output-by-run no -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id $start_job_id -input-jobs $job -nogenbank -lds2 $reads_LDS -asn-cache tmp/asncache -gc $gencoll -work-area tmp -O tmp/interim $minimap2_wnode_params
+    fi
     mkdir -p alignments
     cat tmp/interim/* > alignments/minimap2_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp
     """
     stub:
         String minimap2_params = merge_params("", parameters, "minimap2-params")
-        String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2_wnode") + ' -minimap2-params "' + minimap2_params + '"'
+        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2_wnode") + ' -minimap2-params "' + minimap2_params + '"'
         println("Effective minimap2_wnode parameters: $minimap2_wnode_params")
     """
     mkdir -p alignments
@@ -191,6 +421,8 @@ process minimap2_wnode {
 
 
 process gpx_qdump {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: "alignments/*"
     output:

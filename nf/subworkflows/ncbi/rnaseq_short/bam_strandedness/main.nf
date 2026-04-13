@@ -23,6 +23,8 @@ workflow bam_strandedness {
 
 process rnaseq_divide_by_strandedness {
     label 'large_disk'
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path bam_list
         path metadata_file
@@ -37,7 +39,12 @@ process rnaseq_divide_by_strandedness {
     mkdir -p output
     mkdir -p tmp
     samtools=\$(which samtools)
-    echo "${bam_list.join('\n')}" > bam_list.mft
+    if [ $bam_list == "unpacked_genome.bam" ]; then
+        mv unpacked_genome.bam GCF_030936135.1_lcl-SRR10853086-Aligned.out.bam
+        echo "GCF_030936135.1_lcl-SRR10853086-Aligned.out.bam" > bam_list.mft
+    else
+        echo "${bam_list.join('\n')}" > bam_list.mft
+    fi
     rnaseq_divide_by_strandedness -work-area tmp -align-manifest bam_list.mft -metadata $metadata_file  $parameters  -samtools-executable \$samtools -stranded-output output/stranded.list -strandedness-output output/run.strandedness -unstranded-output output/unstranded.list
     rm -rf tmp
     """

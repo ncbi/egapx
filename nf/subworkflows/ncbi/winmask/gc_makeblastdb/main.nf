@@ -20,6 +20,8 @@ workflow gc_makeblastdb {
 
 
 process run_gc_makeblastdb{
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path genome_asnb
         path seqids

@@ -3,7 +3,7 @@ tasks:
     convert_genome: force-local-ids
     convert_proteins: force-local-ids
   align_sort_sa:
-    align_sort: -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
+    align_sort: -limit-mem 13G -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   bam_bin_and_sort:
     bam_bin: -avg-size-per-bin 200000000 -file-pattern 'bin#.bam' -exclude-organelle
   bam_strandedness:
@@ -17,10 +17,9 @@ tasks:
       5 -min-non-consensussupport 10 -min-support-fraction 0.03 -minex 10 -mininframefrac
       0.95 -minlen 225 -minpolya 6 -minprotfrac 0.9 -minscor 40.0 -minsupport 3 -minsupport_mrna
       1 -minsupport_rnaseq 5 -mrnaCDS use_objmgr -oep 10 -protcdslen 450 -sharp-boundary
-      0.2 -tolerance 3 -trim 6 -utrclipthreshold 0.01 -fillgenomicgaps -filterest
+      0.2 -tolerance 3 -trim 6 -utrclipthreshold 0.01 -filterest
       -filtermrna -filterprots -opposite -collapsest
     gpx_make_outputs: -default-output-name chains -slices-for affinity -sort-by affinity
-    input_aligns_sort: merge_only
     submit_chainer: -minimum-abut-margin 20 -separate-within-introns
   convert_from_bam:
     sam2asn: -filter 'pct_identity_gap >= 95' -ofmt seq-align-compressed -collapse-identical
@@ -54,24 +53,27 @@ tasks:
       --runRNGseed 777 --outMultimapperOrder Old_2.4 --outSAMorder PairedKeepInputOrder
   miniprot:
     split_proteins: -n 25000
-    miniprot: -t 31 -p 0.4 --outs=0.4
+    miniprot: -p 0.4 --outs=0.4
   minimap2_index:
     minimap2_index: -k 15 -w 5
   minimap2_wnode:
+    split: 16
     gpx_qsubmit: -batch-size 5000 -max-execs 100
     minimap2_wnode: -est_colocation_weight 0 -min-entropy 0.65
       -workers 1 -generate-stats
       -output_one_orientation_only -trust_input_collation -with-best-placement
-    minimap2-params: -x splice --eqx --MD --cs -Y --sam-hit-only -M 0.9 -p 0.1 -N 25
+    minimap2_wnode_fasta: -include-mismatch-bases no -high-qual-coverage-score no
+    minimap2-params: -x splice --eqx --MD --cs -Y --sam-hit-only -M 0.9 -p 0.1 -N 25 
   filter_est_align:
-    align_filter: -filter '((matches >= 100 && splices > 0) || (matches >= 250 && splices == 0)) && product_coverage >= 0.35 && exon_identity >= 0.85 && consensus_splices >= MUL(SUB(exon_count,1),2) && ((max_intron_len < 200000 && (pct_identity_ungap < 98 || pct_coverage < 90)) || max_intron_len < 1300000) && SUB(subject_end,subject_start)<5000000 && rank == 1'
-    align_sort: -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
+    align_filter: -filter '((matches >= 100 && splices > 0) || (matches >= 250 && splices == 0)) && product_coverage >= 0.35 && exon_identity >= 0.85 && consensus_splices >= MUL(SUB(exon_count,1),2) && ((max_intron_len < 200000 && (pct_identity_ungap < 98 || pct_coverage < 90)) ) && SUB(subject_end,subject_start)<5000000 && rank == 1'
+    align_sort:  -limit-mem 13G -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   paf2asn:
     paf2asn: -prosplign-refinement
   best_aligned_prot:
     best_placement: -asm_alns_filter 'reciprocity = 3'
-  chainer_sort_alignments:
-    align_sort:  -ifmt seq-align  -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
+  gnomon_align_sort:
+    input_aligns_sort: merge_only
+    align_sort:   -ifmt seq-align  -k 'subject,subject_start,-subject_end' 
   align_filter_sa:
     align_filter:  -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  
   gnomon_training:
@@ -102,7 +104,7 @@ tasks:
     extract_products: ''
   best_protein_hits:
     align_filter: -filter 'pct_coverage >= 50'
-    align_sort: -filter 'pct_coverage >= 50' -group 1 -ifmt seq-align-set -k query,-bit_score,slen,-align_length -ofmt seq-align-set -top 1
+    align_sort: -limit-mem 13G  -filter 'pct_coverage >= 50' -group 1 -ifmt seq-align-set -k query,-bit_score,slen,-align_length -ofmt seq-align-set -top 1
   annot_builder:
     annot_builder: ''
   annotwriter:
@@ -128,7 +130,7 @@ tasks:
     combine_blast_db_hardmask: -blast-algo-program 100 -blast-algo-options 'GPIPE&NCBI%2DGPipe%2DHardmask&&Foreign%20Contamination'
     combine_blast_db_softmask: -blast-algo-program 100 -blast-algo-options 'GPIPE&NCBI%2DGPipe%2DSoftmask&&Foreign%20Contamination'
   make_winmask_stats:
-    make_winmask_stats: -infmt seqids -sformat obinary -smem 1024
+    make_winmask_stats: -infmt seqids -mem 16384 -sformat binary 
   gc_makeblastdb:
     gc_makeblastdb: ''
   cmsearch:

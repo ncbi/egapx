@@ -25,6 +25,8 @@ workflow best_aligned_prot {
 
 
 process run_best_aligned_prot {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path genome, stageAs: 'indexed/genome.asnt'
         path proteins,  stageAs: 'indexed/proteins.asnt'

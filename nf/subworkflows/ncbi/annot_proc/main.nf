@@ -6,7 +6,7 @@ nextflow.enable.dsl=2
 
 params.import_prefix = "../../../../nf/subworkflows/ncbi/" // redirected during testing
 
-include { gnomon_biotype} from "${params.import_prefix}annot_proc/gnomon_biotype/main"
+include { gnomon_biotype } from "${params.import_prefix}annot_proc/gnomon_biotype/main"
 include { orthology_plane } from "../orthology/main"
 include { locus_track } from "${params.import_prefix}annot_proc/locus_track/main"
 include { locus_link } from "${params.import_prefix}annot_proc/locus_link/main"
@@ -22,6 +22,8 @@ params.intermediate = false
 // curr_tax_id|is_curated_genome|symbol_format_class|extrn_naming_authority|use_in_lxr_client|<unused by tax_attrs>|orth_source_tax_id|schema_ver
 // tax_id|0|symbol_format_class|1|0|y|ortho_tax_id(zero for now?)|2
 process print_fake_lxr_data {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         val tax_id
         val symbol_format_class

@@ -22,6 +22,8 @@ workflow rnaseq_register_stats {
 
 
 process register_stats {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path gencoll_asn
         path sra_metadata

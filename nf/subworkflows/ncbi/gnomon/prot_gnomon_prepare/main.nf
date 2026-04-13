@@ -21,6 +21,8 @@ workflow prot_gnomon_prepare {
 
 
 process prot_gnomon_prepare_p {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path models
         val params

@@ -4,7 +4,6 @@ nextflow.enable.dsl=2
 include { merge_params } from '../../utilities'
 
 
-
 workflow rnaseq_collapse {
     take:
         genome            // path: file of genomic sequences, FASTA or ASN
@@ -30,6 +29,8 @@ workflow rnaseq_collapse {
 
 
 process generate_jobs {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path genome, stageAs: 'genome/*'
         path scaffold_list
@@ -63,6 +64,8 @@ process generate_jobs {
 
 
 process run_rnaseq_collapse {
+    label 'multi_node'
+    label 'small_mem'
     input:
         path genome, stageAs: 'genome/*'
         path scaffold_list
@@ -75,13 +78,6 @@ process run_rnaseq_collapse {
         path "output/*"
     script:
     """
-    njobs=`wc -l <$job`
-    if [ \$njobs -lt 16 ]; then
-        threads=\$njobs
-    else
-        threads=16
-    fi
-
     echo "${scaffold_list.join('\n')}" > scaffold_list.mft
     echo "${in_align.join('\n')}" > align.mft
     echo "${sra_metadata_list.join('\n')}" > metadata.mft
@@ -98,7 +94,7 @@ process run_rnaseq_collapse {
     lds2_indexer -source ./genome -db tmp/genome_lds  
   
     mkdir -p tmp/interim
-    rnaseq_collapse $params -O tmp/interim -nogenbank -lds2 tmp/genome_lds -sorted-vols align.mft -scaffold-list scaffold_list.mft -sra-metadata-manifest metadata.mft -start-job-id \$start_job_id -input-jobs $job -workers \$threads
+    rnaseq_collapse $params -O tmp/interim -nogenbank -lds2 tmp/genome_lds -sorted-vols align.mft -scaffold-list scaffold_list.mft -sra-metadata-manifest metadata.mft -start-job-id \$start_job_id -input-jobs $job -workers ${task.ext.threads}
 
     mkdir -p output
     cat tmp/interim/* > output/rnaseq_collapse.${task.index}.gpx-job.asnb
@@ -115,6 +111,8 @@ process run_rnaseq_collapse {
 
 
 process run_gpx_make_outputs {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path files, stageAs: 'input/*'
         val  params

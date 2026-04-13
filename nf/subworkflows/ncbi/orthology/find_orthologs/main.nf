@@ -30,6 +30,8 @@ workflow find_orthologs {
 
 
 process run_find_orthologs {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path input_gencoll_asn     
         path ref_gencoll_asn, stageAs: 'input/ref_gencoll.asn'
@@ -55,17 +57,16 @@ process run_find_orthologs {
     if [ -z "$blastdb" ]
     then
         mkdir -p tmp/asncache
-        prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i $ref_proteins_asn  -oseq-ids /dev/null -split-sequences
-        prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i $input_genome_asn  -oseq-ids /dev/null -split-sequences
-        prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i $input_proteins_asn  -oseq-ids /dev/null -split-sequences
-        prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i input/ref_genome.asn  -oseq-ids /dev/null -split-sequences
+        auto_prime_cache.py -cache tmp/asncache/ -i $ref_proteins_asn  -oseq-ids /dev/null -split-sequences
+        auto_prime_cache.py -cache tmp/asncache/ -i $input_genome_asn  -oseq-ids /dev/null -split-sequences
+        auto_prime_cache.py -cache tmp/asncache/ -i $input_proteins_asn  -oseq-ids /dev/null -split-sequences
+        auto_prime_cache.py -cache tmp/asncache/ -i input/ref_genome.asn  -oseq-ids /dev/null -split-sequences
         str="-asn-cache tmp/asncache/  -prot_hits_serial_type Seq-align-set"
     else
         str="-blastdb $blastdb/prot.blastdb,$blastdb/nucl.blastdb -prot_hits_serial_type Seq-align"
     fi
-    find_orthologs $parameters -gc1 $input_gencoll_asn -gc2 input/ref_gencoll.asn -annots1 annotations1.mft  -annots2 annotations2.mft  \
-                 \$str  -o_orthologs output/orthologs.rpt   -prot_hits $prot_hits \
-                 -o_stats output/stats.xml -nogenbank
+    echo \$str
+    find_orthologs $parameters -gc1 $input_gencoll_asn -gc2 input/ref_gencoll.asn -annots1 annotations1.mft  -annots2 annotations2.mft \$str -o_orthologs output/orthologs.rpt   -prot_hits $prot_hits -o_stats output/stats.xml -nogenbank
 
     rm -rf tmp
     """
@@ -85,6 +86,8 @@ process run_find_orthologs {
 //ref_geng_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_genomic.gff.gz' 
 //ref_name_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/name_from_ortholog.rpt' 
 process fetch_ortholog_references  {
+    label 'multi_cpu'
+    label 'small_mem'
     input:
         //path ortho_files      // map with file sources
         path genomic_fna

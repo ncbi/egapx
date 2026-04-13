@@ -23,6 +23,8 @@ workflow paf2asn {
 
 process run_paf2asn {
     label 'long_job'
+    label 'multi_node'
+    label 'small_mem'
     input:
         path genome,  stageAs: 'indexed/genome.asnt'
         path proteins,  stageAs: 'indexed/proteins.asnt'
@@ -31,7 +33,7 @@ process run_paf2asn {
     output:
         path 'output/*.asn', emit: 'asn_file'
     script:
-        def asn_name = paf_file.baseName.toString() + ".align.asn"    // fails when it it multiple files (paf_file)
+        def asn_name = paf_file.baseName.toString() + ".asn"    // fails when it it multiple files (paf_file)
         //def asn_name = "paf_file.align.asn"    // this could be multiple files (paf_file)
     """
     mkdir -p output
@@ -44,7 +46,7 @@ process run_paf2asn {
     rm -rf tmp
     """
     stub:
-        def asn_name = paf_file.baseName.toString() + ".align.asn"    
+        def asn_name = paf_file.baseName.toString() + ".asn"    
     """
     mkdir -p output
     touch output/${asn_name}

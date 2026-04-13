@@ -24,6 +24,8 @@ workflow align_filter_sa {
 
 
 process run_align_filter_sa {
+    label 'multi_cpu'
+    label 'small_mem'
     input:
         path genome, stageAs: 'indexed/genome.asnt'
         path proteins,  stageAs: 'indexed/proteins.asnt'

@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 
 
 /*
- *Execution of: 
+ *Execution of:
  * gbin/diamond 
  *    -asn-cache GP37025.85624/sequence_cache 
  *    -blastp-args '--sam-query-len --comp-based-stats 0 --evalue 0.0001 --very-sensitive --max-hsps 3' 
@@ -28,6 +28,8 @@ include {to_map; shellSplit } from '../../utilities'
 
 
 process fetch_swiss_prot_asn  {
+    label 'single_cpu'
+    label 'small_mem'
     input:
         path swiss_prot_url
     output:
@@ -43,6 +45,8 @@ process fetch_swiss_prot_asn  {
 }
 
 process get_swiss_prot_ids {
+    label 'single_cpu'
+    label 'small_mem'
     label 'sqlite3'
     input:
         path swiss_prot_asn, stageAs: 'input/*'
@@ -64,6 +68,8 @@ process get_swiss_prot_ids {
 }
 
 process run_diamond_egap {
+    label 'multi_cpu'
+    label 'med_mem'
     input:
         path gnomon_prot_ids
         path swiss_prot_ids
@@ -82,16 +88,18 @@ process run_diamond_egap {
     diamond_bin=\${GP_HOME}/third-party/diamond/diamond
     
     mkdir -p tmp/asncache
-
-    prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${gnomon_prot_asn} -oseq-ids /dev/null -split-sequences
-    prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${swiss_prot_asn} -oseq-ids /dev/null -split-sequences
+    if [[ -n \${TMPDIR-} ]]; then
+        mkdir -p \${TMPDIR} || true
+    fi
+    auto_prime_cache.py -cache tmp/asncache/ -i ${gnomon_prot_asn} -oseq-ids /dev/null -split-sequences
+    auto_prime_cache.py -cache tmp/asncache/ -i ${swiss_prot_asn} -oseq-ids /dev/null -split-sequences
 
     mkdir -p output
     mkdir -p tmp/work
 
     echo  ${params}
     echo "${gnomon_prot_ids.join('\n')}" > query.mft
-    diamond_egap  ${params} -asn-cache tmp/asncache/ -nogenbank -query-manifest query.mft -subject ${swiss_prot_ids} -output-dir ./output/ -work-area tmp/work/  -diamond-executable \${diamond_bin}
+    diamond_egap  ${params}  -asn-cache tmp/asncache/ -nogenbank -query-manifest query.mft -subject ${swiss_prot_ids} -output-dir ./output/ -work-area tmp/work/  -diamond-executable \${diamond_bin}
     rm -rf tmp
     """
 
