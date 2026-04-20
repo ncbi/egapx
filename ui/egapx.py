@@ -1113,7 +1113,7 @@ def _generate_fake_metadata(prefixes: defaultdict[str, list[str]], sra_metadata_
                     out_rec.append('NA') # Insert 'NA' for release_date
             else:
                 out_rec = [run_name_resolved, 'NA', paired, '2', '2', 'NA', 'NA', 'NA', 'NA', 'NA', 'NA',
-                           'SAMN_' + run_name_resolved, 'NA', 'NA', 'NA', '0', 'NA']
+                           'SAMN_' + run_name_resolved, '0', 'NA', 'NA', '0', 'NA']
             not_sra.append(SraMetadata(*out_rec))
     return not_sra, error_msg
 
