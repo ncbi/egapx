@@ -246,12 +246,7 @@ Based on Internet access from the submit/main node and worker nodes, EGAPx can b
   ```
   python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -e <executor> -w <workdir> -o <output>
   ```
-  - This will create a `./egapx_config` directory containing the template config files.  
-  - :warning: You'll need to edit these templates to suit your specific environment:
-    - For AWS Batch execution, set up AWS Batch Service following the process [here](https://www.nextflow.io/docs/latest/aws.html). Then edit the value for `process.queue` in `./egapx_config/aws.config` file.
-    - Some executors, e.g. `-e docker` and `-e singularity` default to running on a single node
-    - For execution on the local machine you don't need to adjust anything.
-
+  - This will create a `./egapx_config` directory containing the template config files.
     - use `-e aws` for AWS batch using Docker image
     - use `-e docker` for using Docker image
     - use `-e singularity` for using the Singularity image
@@ -259,6 +254,10 @@ Based on Internet access from the submit/main node and worker nodes, EGAPx can b
     - use `-e slurm` for using SLURM in your HPC.
         - Note that for this option, you have to edit `./egapx_config/slurm.config` according to your cluster specifications.
     - type `python3 ui/egapx.py  -h ` for the help menu
+  - :warning: You'll need to edit these templates to suit your specific environment:
+    - For AWS Batch execution, set up AWS Batch Service following the process [here](https://www.nextflow.io/docs/latest/aws.html). Then edit the value for `process.queue` in `./egapx_config/aws.config` file.
+    - Some executors, e.g. `-e docker` and `-e singularity` default to running on a single node
+    - For execution on the local machine you don't need to adjust anything.
 
 - The default memory and CPU configuration is at `./egapx_config/process_resources.config`
 - The default configuration has tested successfully for: 
@@ -306,8 +305,18 @@ In online mode, support files are automatically staged before EGAPx pipeline exe
 ### Offline mode
 [Back to Top](#Contents)
 
-In offline mode, you download the necessary files from NCBI FTP and the BUSCO website using `egapx.py` script, then use the path of the downloaded folder in the run command. This mode is useful if your Internet access is more restricted or you want reproducible runs with controlled local data.
-
+In offline mode, first pull the Singularity image, then download the necessary files from NCBI FTP and the BUSCO website using `egapx.py` script, then use the path of the downloaded folder in the run command. This mode is useful if your Internet access is more restricted or you want reproducible runs with controlled local data. Here is an example of how to download the files and execute EGAPx in the Biowulf cluster.
+- Download the Singularity image:
+  ```
+  rm egap*sif
+  singularity cache clean
+  singularity pull docker://ncbi/egapx:0.5.2
+  ```
+  Clone the repo:
+  ```
+  git clone https://github.com/ncbi/egapx.git
+  cd egapx
+  ```
 - Download all EGAPx support files, relevant BUSCO lineage files, and SRA data:
   ```
   python3 ui/egapx.py ./examples/input_D_farinae_small.yaml -dl -lc local_cache
@@ -334,9 +343,14 @@ In offline mode, you download the necessary files from NCBI FTP and the BUSCO we
      - - /path/to/local_cache/sra_dir/SRR9005248.1.fasta
        - /path/to/local_cache/sra_dir/SRR9005248.2.fasta
   ```
-- Run EGAPx:
+- Run EGAPx to generate `egapx_config` folder and edit the `biowulf_cluster.config`:
   ```
-  python3 ui/egapx.py edit_D_farinae_small.yaml -e <executor> -w <workdir> -o <output> -lc local_cache
+  python3 ui/egapx.py edit_D_farinae_small.yaml -e biowulf_cluster -w <workdir> -o <output> -lc local_cache
+  echo "process.container = '/path/to/egapx_0.5.2.sif'"  >> egapx_config/biowulf_cluster.config
+  ```
+  After configuration files are finalized, run EGAPx again 
+  ```
+  python3 ui/egapx.py edit_D_farinae_small.yaml -e biowulf_cluster -w <workdir> -o <output> -lc local_cache
   ```
 - For EGAPx runs using full SRA datasets, if [fasterq-dump](https://github.com/ncbi/sra-tools/wiki/HowTo:-fasterq-dump) is available and the input yaml file has a list of SRA runs, `egapx.py` will download those SRA runs too and place them at `../local_cache`. When you start your egapx run using the same input yaml, and provide the local cache, it will look for those SRA run files in the local cache directory. Alternately, you can download full SRA runs yourself using the commands below, then edit the EGAPx YAML to provide paths to the local files:
   ```
@@ -759,4 +773,4 @@ Nawrocki EP, Eddy SR. Infernal 1.1: 100-fold faster RNA homology searches. Bioin
 
 ## Contact us
 
-Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues) if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions. 
+Please open a GitHub [Issue](https://github.com/ncbi/egapx/issues) if you encounter any problems with EGAPx. You can also write to cgr@nlm.nih.gov to give us your feedback or if you have any questions.
