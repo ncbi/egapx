@@ -72,7 +72,7 @@ def safe_urlretrieve(url, filename):
 # Requires pip install -r requirements.txt
 import yaml
 
-software_version = "0.5.1"
+software_version = "0.5.2"
 DEFAULT_DATA_VERSION = "current_1"
 
 start_time = time.time()
