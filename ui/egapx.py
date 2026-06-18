@@ -2360,7 +2360,24 @@ def read_cache() -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, 
         if not g_sra_to_file_map:
             sra_runs_file = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER, SRA_RUNS_FILE)
             if os.path.isfile(sra_runs_file):
-                g_sra_to_file_map = yaml.safe_load(open(sra_runs_file, 'r'))
+                raw_sra_to_file_map = yaml.safe_load(open(sra_runs_file, 'r')) or {}
+                # Stored paths are absolute and point at the location where the cache
+                # was created. When the cache directory is relocated (for example, moved
+                # between jobs), those paths no longer exist. Rebase each cached read
+                # file onto the current cache location by file name so the cache is
+                # relocatable; fall back to the stored path only if the rebased file
+                # is absent.
+                sra_files_dir = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER)
+                g_sra_to_file_map = {}
+                for run_accession, file_list in raw_sra_to_file_map.items():
+                    rebased_files = []
+                    for file_path in file_list:
+                        candidate = os.path.join(sra_files_dir, os.path.basename(file_path))
+                        if os.path.isfile(candidate):
+                            rebased_files.append(candidate)
+                        elif os.path.isfile(file_path):
+                            rebased_files.append(file_path)
+                    g_sra_to_file_map[run_accession] = rebased_files
         if not g_query_to_accessions_map:
             sra_queries_file = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER, SRA_QUERIES_FILE)
             if os.path.isfile(sra_queries_file):
