@@ -39,7 +39,7 @@ tasks:
   rnaseq_collapse:
     gpx_make_outputs: -default-output-name align -slices-for affinity -sort-by job-id -unzip align
     gpx_qsubmit: -affinity subject
-    rnaseq_collapse: -backlog 1 -max-jobs 1 -support-non-sra
+    rnaseq_collapse: -backlog 1 -max-jobs 1 -support-non-sra  -rank-counts-precalculated  
     # -rank-counts-precalculated
     rnaseq_collapse_create_jobs: -alignments-per-job 50000 -min-range 100000
   star_index:
@@ -51,6 +51,10 @@ tasks:
       nM NM MD jM jI XS MC' --outSAMprimaryFlag AllBestScore --outFilterMultimapScoreRange
       50 --seedSearchStartLmax 15 --limitOutSAMoneReadBytes 1000000 --outSJtype None
       --runRNGseed 777 --outMultimapperOrder Old_2.4 --outSAMorder PairedKeepInputOrder
+  rnaseq_register_stats:
+    rnaseq_register_stats: ''
+  rnaseq_align_report:
+    rnaseq_align_report: ''
   miniprot:
     split_proteins: -n 25000
     miniprot: -p 0.4 --outs=0.4
@@ -59,7 +63,7 @@ tasks:
   minimap2_wnode:
     split: 16
     gpx_qsubmit: -batch-size 5000 -max-execs 100
-    minimap2_wnode: -est_colocation_weight 0 -min-entropy 0.65
+    minimap2-wnode: -est_colocation_weight 0 -min-entropy 0.65
       -workers 1 -generate-stats
       -output_one_orientation_only -trust_input_collation -with-best-placement
     minimap2_wnode_fasta: -include-mismatch-bases no -high-qual-coverage-score no
@@ -85,13 +89,13 @@ tasks:
     diamond_blastp: --sam-query-len --comp-based-stats 1 --evalue 0.0001 --very-sensitive --masking 1 --unal 0
   diamond_orthology:
     diamond: -ofmt seq-align-set -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits
-    diamond_blastp: --sam-query-len --very-sensitive --unal 0 --max-target-seqs 100 --comp-based-stats 0 --masking 0
+    diamond_blastp: --sam-query-len --very-sensitive --unal 0 --max-hsps 3 --max-target-seqs 100 --comp-based-stats 0 --masking 0
   gnomon_biotype:
     gnomon_biotype: ''
   gnomon_evidence_summary:
     gnomon_evidence_summary: ''
   find_orthologs:
-    find_orthologs: ''
+    find_orthologs: ' -check_exome '
   locus_link:
     locus_type: ''
   locus_track:
@@ -164,3 +168,13 @@ tasks:
     mask_assm_stats: ''
   fasta_from_annots:
     gnomon_asn2fasta: -it -one-per-gene -primary-only -separate-by-unit
+  long_read_align_report:
+    long_read_align_report: ''
+  align_as_tabular_sa:
+    align_format: -ifmt seq-align -tabular-fmt 'qacc qtaxid pident pcov score(rank)'
+  proteins_by_taxid:
+    products_by_taxid: -count-threshold 5000 -identity-pct-threshold 90 -relevant-product-types XP
+  align_filter_sa_remove_low_quality:
+    align_filter: -filter 'NOT ((frame>0 OR cds_internal_stops>0) AND (rank=1 OR splices>0))' -ifmt seq-align
+  multiqc:
+    run_multiqc: ''

@@ -86,7 +86,7 @@ process run_find_orthologs {
 //ref_geng_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/current/GCF_000001405.40_GRCh38.p14_genomic.gff.gz' 
 //ref_name_url='https://ftp.ncbi.nlm.nih.gov/genomes/TOOLS/EGAP/ortholog_references/9606/name_from_ortholog.rpt' 
 process fetch_ortholog_references  {
-    label 'multi_cpu'
+    label 'single_cpu'
     label 'small_mem'
     input:
         //path ortho_files      // map with file sources

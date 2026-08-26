@@ -5,19 +5,21 @@
 nextflow.enable.dsl=2
 import groovy.yaml.YamlBuilder
 
-include { rnaseq_short_plane } from './rnaseq_short/main'
-include { rnaseq_long_plane } from './rnaseq_long/main'
-include { target_proteins_plane } from './target_proteins/main'
-include { gnomon_plane } from './gnomon/main'
+include { cmsearch_plane_cached as cmsearch_plane } from './cmsearch/main'
+include { trnascan_plane_cached as trnascan_plane } from './trna_scan/main'
+include { winmask_plane_cached as winmask_plane } from './winmask/main'
+include { target_proteins_plane_cached as target_proteins_plane } from './target_proteins/main'
+include { rnaseq_short_plane_cached as rnaseq_short_plane } from './rnaseq_short/main'
+include { rnaseq_long_plane_cached as rnaseq_long_plane } from './rnaseq_long/main'
+include { gnomon_plane_cached as gnomon_plane } from './gnomon/main'
 include { orthology_plane } from './orthology/main'
 include { annot_proc_plane } from './annot_proc/main'
 include { setup_genome; setup_proteins } from './setup/main'
 include { convert_annotations } from './default/convert_annotations/main'
 include { convert_summary_files } from './default/convert_summary_files/main'
-include { cmsearch_plane } from './cmsearch/main'
-include { trnascan_plane } from './trna_scan/main'
 include { busco } from './busco/main'
-include { winmask_plane } from './winmask/main'
+include { report_plane } from './report/main'
+
 
 params.verbose = false
 
@@ -91,6 +93,9 @@ workflow egapx {
         def annotation_name_prefix = input_params.get('annotation_name_prefix', []) ?: 'EGAPx Test Assembly'
         def protein_aligner_name = input_params.get('protein_aligner_name', 'miniprot')
         def proteins_filter_taxons = input_params.get('proteins_filter_taxons', [])
+        def splices_files = input_params.get('prot_splices', [])
+        def assembly_taxid_list = input_params.get('assembly_taxid_list', [])
+        def proteins_accessions_list = input_params.get('proteins_accessions_list', [])
 
         if (params.verbose) {
             // dump all params as yaml
@@ -98,7 +103,10 @@ workflow egapx {
             builder(params)
             println(builder.toString())
         }
-         
+
+        task_params.checkpoints_save = input_params.get('checkpoints_save', false) 
+        task_params.checkpoints_dir = input_params.get('checkpoints_dir', [])
+
         setup_genome_params = task_params.get('setup', [:])
         setup_genome_params['max_intron'] = max_intron
         setup_genome_params['genome_size_threshold'] = genome_size_threshold
@@ -116,11 +124,14 @@ workflow egapx {
         def unpacked_proteins
         def proteins_asn = []
         def proteins_asnb = []
+        def tp_filtered_protein_alignments = []
+        def tp_prot_align_stats = []
         if (proteins) {
             // miniprot plane
             (unpacked_proteins, proteins_asn) = setup_proteins(proteins, proteins_filter_taxons, additional_proteins, task_params.get('setup', [:]))
-            target_proteins_plane(unpacked_genome, genome_asn, genome_blastdb, gencoll_asn, unpacked_proteins, proteins_asn, protein_aligner_name, eff_max_intron, task_params)
-            protein_alignments = target_proteins_plane.out.protein_alignments
+            target_proteins_plane(unpacked_genome, genome_asn, genome_blastdb, gencoll_asn, unpacked_proteins, proteins_asn, protein_aligner_name, eff_max_intron, assembly_taxid_list, proteins_accessions_list, proteins_filter_taxons, annotation_name_prefix, task_params)
+            tp_filtered_protein_alignments = target_proteins_plane.out.filtered_protein_alignments
+            tp_prot_align_stats = target_proteins_plane.out.prot_align_stats
         }
 
         // RNASeq short alignments
@@ -128,11 +139,19 @@ workflow egapx {
         def star_bam = []
         sra_exons = []
         sra_exons_slices = []
+        def rnaseq_run_stats_out = []
+        def rnaseq_align_report_out = []
+        def rnaseq_run_reports_out = []
+        def rnaseq_short_star_logs = []
         if (short_reads_ids || short_reads) {
-            rnaseq_short_plane(genome_asn, scaffolds, unpacked_genome, short_reads_ids, short_reads, short_reads_metadata, organelles, tax_id, eff_max_intron, task_params) 
+            rnaseq_short_plane(genome_asn, gencoll_asn, scaffolds, unpacked_genome, short_reads_ids, short_reads, short_reads_metadata, organelles, tax_id, eff_max_intron, task_params) 
             rnaseq_short_alignments = rnaseq_short_plane.out.rnaseq_alignments
             sra_exons = rnaseq_short_plane.out.sra_exons
             sra_exons_slices = rnaseq_short_plane.out.sra_exons_slices
+            rnaseq_run_stats_out = rnaseq_short_plane.out.run_stats
+            rnaseq_align_report_out = rnaseq_short_plane.out.align_report
+            rnaseq_run_reports_out = rnaseq_short_plane.out.run_reports
+            rnaseq_short_star_logs = rnaseq_short_plane.out.star_logs
             if (export_bam){
                 star_bam = rnaseq_short_plane.out.star_bam
             }
@@ -141,24 +160,30 @@ workflow egapx {
         // Combine RNASeq short and protein alignments
         def rnsp_alignments
         if (proteins && (short_reads_ids || short_reads)) {
-            rnsp_alignments = rnaseq_short_alignments.combine(protein_alignments)
+            rnsp_alignments = rnaseq_short_alignments.combine(tp_filtered_protein_alignments)
         } else if (proteins) {
-            rnsp_alignments = protein_alignments
+            rnsp_alignments = tp_filtered_protein_alignments
         } else {
             rnsp_alignments = rnaseq_short_alignments
         }
 
         def alignments
+        def rnaseq_long_align_report_out = []
+        def minimap2_stats_out = []
+        def rnlp_filter_est_align_stats_out = []
         // RNASeq long alignments
         if (long_reads_ids || long_reads) {
-            rnaseq_long_plane(unpacked_genome, gencoll_asn, long_reads_ids, long_reads, eff_max_intron, task_params)
+            rnaseq_long_plane(unpacked_genome, gencoll_asn, long_reads_ids, long_reads, eff_max_intron, long_reads_metadata, task_params)
             alignments = rnsp_alignments.combine(rnaseq_long_plane.out.alignments)
+            rnaseq_long_align_report_out = rnaseq_long_plane.out.align_report
+            rnlp_filter_est_align_stats_out = rnaseq_long_plane.out.filter_est_align_stats
+            minimap2_stats_out = rnaseq_long_plane.out.minimap2_stats
         } else {
             alignments = rnsp_alignments
         }
 
         // GNOMON
-
+        
         def gnomon_models = []
         def effective_hmm
         gnomon_plane(genome_asn, scaffolds, gencoll_asn, proteins_asn, alignments, sra_exons, sra_exons_slices, proteins_trusted, tax_id, hmm_params, train_hmm, win_softmask, eff_max_intron, reference_sets, gnomon_filtering_scores_file, task_params) 
@@ -166,7 +191,7 @@ workflow egapx {
 
         def cmsearch_annots = []
         if (params?.tasks?.cmsearch?.enabled) {
-            cmsearch_plane(unpacked_genome)
+            cmsearch_plane(unpacked_genome, task_params)
             cmsearch_annots = cmsearch_plane.out.cmsearch_annots
         } else {
             println("Note: cmsearch plane is disabled in params.")
@@ -174,7 +199,7 @@ workflow egapx {
 
         def trnascan_annots = []
         if (params?.tasks?.trnascan?.enabled) {
-            trnascan_plane(unpacked_genome)
+            trnascan_plane(unpacked_genome, task_params)
             trnascan_annots = trnascan_plane.out.trnascan_annots
         } else {
             println("Note: trnascan plane is disabled in params.")
@@ -191,7 +216,7 @@ workflow egapx {
 
         annot_proc_plane(annotation_name_prefix, gnomon_models, cmsearch_annots, trnascan_annots, gencoll_asn, genome_asn, genome_asnb,
                          scaffolds, tax_id, lineage_taxids, symbol_format_class, name_cleanup_rules_file,
-                         ortho_files, gnomon_plane.out.alignments, gnomon_plane.out.best_naming_hits, gnomon_plane.out.swiss_prot_asn, prot_denylist, task_params)
+                         ortho_files, gnomon_plane.out.alignments, gnomon_plane.out.best_naming_hits, gnomon_plane.out.swiss_prot_asn, prot_denylist, splices_files, task_params)
 
         locus_out = annot_proc_plane.out.locus
         locustypes = annot_proc_plane.out.locustypes
@@ -206,10 +231,13 @@ workflow egapx {
 
         // BUSCO
         def busco_out = []
+        def busco_log_file = []
         if (busco_lineage) {
             busco(annot_proc_plane.out.annot_proteins, busco_lineage, busco_lineage_download, task_params.get('busco', [:]))
             busco_out = busco.out.results
-        } 
+            busco_log_file = busco.out.log_file
+        }
+        report_plane(rnaseq_short_star_logs, busco_log_file, winmask_plane.out.mask_stats, annot_proc_plane.out.feature_counts_xml, annot_proc_plane.out.feature_stats_xml, rnaseq_long_align_report_out, tp_prot_align_stats ,rnaseq_align_report_out,  task_params.get('report', [:]))
 
     emit:
         out_files = gff_annotated_file
@@ -235,5 +263,14 @@ workflow egapx {
         busco_results = busco_out
         gnomon_biotype_contam_rpt = annot_proc_plane.out.gnomon_biotype_contam_rpt 
         mask_stats = winmask_plane.out.mask_stats
+        rnaseq_run_stats = rnaseq_run_stats_out
+        rnaseq_align_report = rnaseq_align_report_out
+        rnaseq_run_reports = rnaseq_run_reports_out
+        rnaseq_long_align_report = rnaseq_long_align_report_out
+        rnlp_filter_est_align_stats = rnlp_filter_est_align_stats_out
+        minimap2_stats = minimap2_stats_out
+        filtered_protein_alignments = tp_filtered_protein_alignments
+        multiqc_report = report_plane.out.multiqc_report
+        prot_align_stats = tp_prot_align_stats
         //converted_outs = converted_outs
 }

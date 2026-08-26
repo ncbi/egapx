@@ -2,8 +2,9 @@
 nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
+include {  gp_register_stats } from '../../shared/gp_register_stats/main.nf'
 
-
+/*
 workflow minimap2 {
     take:
         genome_fasta
@@ -27,10 +28,12 @@ workflow minimap2 {
         // new_jobs.view()
         alignments = minimap2_wnode(genome_fasta, genome_index, gencoll, new_jobs, max_intron, parameters)
         gpx_qdump(alignments.collect())
+        gp_register_stats(alignments.collect(), gencoll, 'minimap2')
     emit:
         alignments = gpx_qdump.out.alignments
+        minimap2_stats = gp_register_stats(gpx_qdump.out.alignments, gencoll, 'minimap2')
 }
-
+*/
 
 workflow minimap2_fasta {
     take:
@@ -135,10 +138,13 @@ workflow minimap2_fasta {
             }
         }
         // individual_files.view { "individual_files: $it" }
-        alignments = minimap2_wnode_fasta(genome_fasta_val, genome_index_val, gencoll_val, individual_files, max_intron, parameters)
-        gpx_qdump(alignments.collect())
+        minimap2_wnode_fasta(genome_fasta_val, genome_index_val, gencoll_val, individual_files, max_intron, parameters)
+        gpx_qdump(minimap2_wnode_fasta.out.alignments.collect())
+        collected_alignments = gpx_qdump.out.alignments.collect()
+        gp_register_stats(collected_alignments, gencoll_val, 'minimap2')
     emit:
-        alignments = gpx_qdump.out.alignments
+        alignments = collected_alignments
+        minimap2_stats = gp_register_stats.out.stats
 }
 
 
@@ -217,11 +223,11 @@ process minimap2_wnode_fasta {
         val max_intron
         val parameters
     output:
-        path "alignments/*", emit: "alignments"
+        path "alignments/*.asnb", emit: "alignments"
     script:
         def nthreads=task.ext.threads
         String minimap2_params = merge_params("-t ${nthreads}", parameters, "minimap2-params")
-        String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2_wnode") +
+        String minimap2_wnode_params =  merge_params("-max-intron ${max_intron}", parameters, "minimap2-wnode") +
                                         ' ' + merge_params("", parameters, "minimap2_wnode_fasta") +
                                         ' -minimap2-params "' + minimap2_params + '"'
     """
@@ -241,7 +247,7 @@ process minimap2_wnode_fasta {
     """
     stub:
         String minimap2_params = merge_params("", parameters, "minimap2-params")
-        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2_wnode") +
+        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2-wnode") +
                                         ' ' + merge_params("", parameters, "minimap2_wnode_fasta") +
                                         ' -minimap2-params "' + minimap2_params + '"'
         println("Effective minimap2_wnode parameters: $minimap2_wnode_params")
@@ -393,7 +399,7 @@ process minimap2_wnode {
         path "alignments/*", emit: "alignments"
     script:
         String minimap2_params = merge_params("", parameters, "minimap2-params")
-        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2_wnode")
+        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2-wnode")
     """
     mkdir -p tmp/asncache
     mkdir -p tmp/interim
@@ -411,7 +417,7 @@ process minimap2_wnode {
     """
     stub:
         String minimap2_params = merge_params("", parameters, "minimap2-params")
-        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2_wnode") + ' -minimap2-params "' + minimap2_params + '"'
+        String minimap2_wnode_params =  merge_params("-max-intron $max_intron", parameters, "minimap2-wnode") + ' -minimap2-params "' + minimap2_params + '"'
         println("Effective minimap2_wnode parameters: $minimap2_wnode_params")
     """
     mkdir -p alignments

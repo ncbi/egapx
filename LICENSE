@@ -29,58 +29,64 @@ EXCEPTIONS (in all cases excluding NCBI-written makefiles):
 
 
 Location: /img/gp/third-party/STAR
-Authors:  Alexander Dobin
+Authors:  A Dobin et al.
 License:  MIT License
           [https://github.com/alexdobin/STAR/blob/master/LICENSE]
 
 Location: /img/gp/third-party/samtools
-Authors:  Genome Research Ltd.
+Authors:  P Danecek et al.
 License:  The MIT/Expat License
           [https://github.com/samtools/samtools/blob/develop/LICENSE]
 
 Location: /img/gp/third-party/miniprot
-Authors:  Dana-Farber Cancer Institute
+Authors:  H Li
 License:  MIT License
           [https://github.com/lh3/miniprot/blob/master/LICENSE.txt]
 
 Location: /img/gp/third-party/diamond
-Authors:  Benjamin Buchfink
+Authors:  B Buchfink et al.
 License:  GNU GENERAL PUBLIC LICENSE
           [https://github.com/bbuchfink/diamond/blob/master/LICENSE]
 
 Location: /img/gp/third-party/seqkit
-Authors:  Wei Shen
+Authors:  W Shen et al.
 License:  MIT License
           [https://github.com/shenwei356/seqkit/blob/master/LICENSE]
 
 Location: /img/gp/third-party/infernal
-Authors:  Sean R. Eddy
+Authors:  E Nawrocki et al.
 License:  BSD License
           [https://github.com/EddyRivasLab/infernal/blob/master/LICENSE]
 
 Location: /img/gp/third-party/tRNAscan-SE
-Authors:  Patricia P. Chan, Brian Lin, and Todd M. Lowe
+Authors:  P Chan et al.
 License:  GPL-3.0
           [https://github.com/EddyRivasLab/infernal/blob/master/LICENSE]
 
 Location: /img/gp/third-party/hmmer
-Authors:  Sean R. Eddy
+Authors:  S Eddy
 License:  BSD License
           [https://github.com/EddyRivasLab/hmmer/blob/master/LICENSE]
 
 Location: /usr/local/bin/busco
-Authors:  Evgeny Zdobnov
+Authors:  Manni et al.
 License:  MIT License
           [https://gitlab.com/ezlab/busco/-/blob/master/LICENSE]
 
 Location: /img/gp/third-party/minimap2
-Authors:  Heng Li
+Authors:  H Li
 License:  MIT License
           [https://github.com/lh3/minimap2/blob/master/LICENSE.txt]
 
 Resource: Swiss-prot dataset
 Authors:  The UniProt Consortium
 License:  [https://www.uniprot.org/help/license]
+
+Location: /usr/local/bin/multiqc
+Authors:  P Ewels et al.
+License:  GNU General Public License v3.0
+          [https://github.com/MultiQC/MultiQC/blob/main/LICENSE]
+          
 ================================================================================
 
 Copyright F.A.Q.

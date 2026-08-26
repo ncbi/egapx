@@ -3,7 +3,6 @@ nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
 
-
 workflow gnomon_wnode {
     take:
         scaffolds
@@ -14,7 +13,7 @@ workflow gnomon_wnode {
         softmask_lds2_source
         genome
         proteins
-        parameters  // Map : extra parameter and parameter update
+        parameters  // Map : extra parameter and parameter update.
     main:
         String gpx_qsubmit_params =  merge_params("", parameters, 'gpx_qsubmit')
         String annot_params =  merge_params("-margin 1000 -mincont 1000 -minlen 225 -mpp 10.0 -ncsp 25 -window 200000 -nonconsens -open", parameters, 'annot_wnode')
@@ -125,7 +124,7 @@ process annot {
 
 
 process gpx_qdump {
-    label 'single_cpu'
+    label 'multi_node'
     label 'small_mem'
     input:
         path files, stageAs: "inputs/*"

@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 
 include { merge_params } from '../../utilities'
 
-
+// rm this test comment
 workflow bam_bin_and_sort {
     take:
         ch_bam          // channel: BAM
@@ -71,7 +71,7 @@ process calc_assembly_sizes {
 
 
 process bam_bin {
-    label 'multi_node'
+    label 'multi_node_single_cpu'
     label 'small_mem'
     input:
         path sorted_bam

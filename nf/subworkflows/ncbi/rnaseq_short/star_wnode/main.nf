@@ -40,6 +40,7 @@ process run_star {
     output:
         path "*-Aligned.out.Sorted.bam", emit: 'align'
         path "*-Aligned.out.Sorted.bam.csi", emit: 'align_index'
+        path "STAR_C_logs/*", emit: 'star_logs'
         // path "per_run_counts.txt", emit: 'per_run_counts'
     script:
         def assembly=genome_file.baseName.toString().replaceFirst(/\.(fa(sta)?|asn[bt]?)$/, "")
@@ -64,6 +65,7 @@ process run_star {
     lds2_indexer -source genome
     mkdir -p out
     mkdir -p wrkarea
+    mkdir -p STAR_C_logs
     if [[ -n \${TMPDIR-} ]]; then
         mkdir -p \${TMPDIR} || true
     fi
@@ -91,6 +93,9 @@ process run_star {
         [[ -f "\${bam}.bai" ]] && samtools index -@ 4 -b "\$bam"
         [[ -f "\${bam}.csi" ]] && samtools index -@ 4 -c "\$bam"
     done
+    cat STAR_logs/*-Log.out > STAR_C_logs/${assembly}-${sampleID}.${task.index}-Log.out
+    cat STAR_logs/*-Log.progress.out > STAR_C_logs/${assembly}-${sampleID}.${task.index}-Log.progress.out
+    cat STAR_logs/*-Log.final.out > STAR_C_logs/${assembly}-${sampleID}.${task.index}-Log.final.out      
     """
     
     stub:
@@ -103,6 +108,10 @@ process run_star {
     # NB: see GP-40504
     echo ${task.index} > ${assembly}-${sampleID}-Aligned.out.Sorted.bam
     echo ${task.index} > ${assembly}-${sampleID}-Aligned.out.Sorted.bam.csi
+    mkdir -p STAR_C_logs
+    echo ${task.index} > STAR_C_logs/${assembly}-${sampleID}-Log.out
+    echo ${task.index} > STAR_C_logs/${assembly}-${sampleID}-Log.progress.out
+    echo ${task.index} > STAR_C_logs/${assembly}-${sampleID}-Log.final.out
     """
 }
 
@@ -120,4 +129,5 @@ workflow star_wnode {
     emit:
         align = run_star.out.align
         align_index = run_star.out.align_index
+        star_logs = run_star.out.star_logs
 }

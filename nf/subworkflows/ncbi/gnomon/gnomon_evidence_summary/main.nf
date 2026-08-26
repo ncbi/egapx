@@ -222,14 +222,10 @@ process gnomon_report {
     script:
     """
     mkdir -p tmp/asncache
-    prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry  -i ${gn_models} -oseq-ids spids1 -split-sequences
-    prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry  -i ${genome_asn} -oseq-ids spids2 -split-sequences
+    auto_prime_cache.py -cache tmp/asncache/ -i ${gn_models} -oseq-ids spids1 -split-sequences
+    auto_prime_cache.py -cache tmp/asncache/  -i ${genome_asn} -oseq-ids spids2 -split-sequences
     if [[ -n "${protein_asn}" ]]; then
-        if [[ `head -c4 ${protein_asn}` == "Seq-" ]]; then
-            prime_cache -cache tmp/asncache/ -ifmt asn-seq-entry -i ${protein_asn} -oseq-ids spids3 #-split-sequences
-        else
-            prime_cache -cache tmp/asncache/ -ifmt asnb-seq-entry -i ${protein_asn} -oseq-ids spids3 #-split-sequences
-        fi
+        auto_prime_cache.py -cache tmp/asncache -i ${protein_asn} -oseq-ids spids3
     fi
 
     filename=\$(basename -- "$jobs")
@@ -245,7 +241,10 @@ process gnomon_report {
         echo "\${f}_true" >> input_slices.mft
     done
     mkdir -p tmp/interim
-    gnomon_report $params -nogenbank -egapx  -input-slices input_slices.mft -asn-cache tmp/asncache/  -start-job-id \$start_job_id -workers ${task.ext.threads} -input-jobs $jobs -O tmp/interim
+
+    ulimit -c unlimited
+
+    gnomon_report $params -nogenbank -egapx  -input-slices input_slices.mft -asn-cache tmp/asncache/  -start-job-id \$start_job_id -workers ${task.ext.threads} -input-jobs $jobs -O tmp/interim > rm_me.stdout 2> rm_me.stderr
 
     mkdir -p output
     cat tmp/interim/* > output/gnomon_report.${task.index}.gpx-job.asnb

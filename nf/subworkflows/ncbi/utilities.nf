@@ -215,3 +215,161 @@ process combine_blast_db{
     touch output/${name}.asnb
     """
 }
+
+
+process format_multiqc_input {
+    label 'single_cpu'
+    label 'small_mem'
+    input:
+        path xmlfile
+    output:
+        path "inputlogs/*", emit: "multiqc_inputs"
+    script:
+    """
+    #!/usr/bin/env python3
+    import json
+    import os
+    import re
+    import xmltodict
+
+    xmlfile = "${xmlfile}"
+    outname = os.path.splitext(os.path.basename(xmlfile))[0]
+    if not outname:
+        outname = "empty_" + os.path.basename(os.getcwd())
+    os.makedirs("inputlogs", exist_ok=True)
+    outfile = os.path.join("inputlogs", f"{outname}_mqc.json")
+
+    ID_ATTRS = ("@feature_type", "@subtype", "@run", "@sample", "@Taxid", "@taxid",
+                "@category", "@Category", "@Name", "@name",
+                "@accession", "@Accession")
+
+    def strip_attr_prefix(key):
+        return key[1:] if key.startswith("@") else key
+
+    def flatten(obj, prefix=""):
+        # Recursively flatten a nested dict/list produced by xmltodict into a
+        # single-level dict of "dotted.key" -> scalar value, for use as the
+        # columns of a single table row. Nested lists here are folded into
+        # columns (not new rows) -- row-splitting is handled by extract_rows().
+        flat = {}
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key == "#text":
+                    flat[prefix or "value"] = value
+                    continue
+                child_key = strip_attr_prefix(key)
+                new_prefix = f"{prefix}.{child_key}" if prefix else child_key
+                flat.update(flatten(value, new_prefix))
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                label = None
+                if isinstance(item, dict):
+                    for id_attr in ID_ATTRS:
+                        if id_attr in item:
+                            label = item[id_attr]
+                            break
+                if label is None:
+                    label = str(i)
+                new_prefix = f"{prefix}.{label}" if prefix else label
+                flat.update(flatten(item, new_prefix))
+        else:
+            flat[prefix or "value"] = obj
+        return flat
+
+    def contains_list(node):
+        # True if a list appears anywhere within node (distinguishes a
+        # "container" element from a "leaf" record that can be flattened
+        # as-is into a single row).
+        if isinstance(node, list):
+            return True
+        if isinstance(node, dict):
+            return any(contains_list(v) for k, v in node.items() if k != "#text")
+        return False
+
+    def pick_row_label(item, fallback):
+        if isinstance(item, dict):
+            for id_attr in ID_ATTRS:
+                if id_attr in item:
+                    return str(item[id_attr])
+        return str(fallback)
+
+    def unique_row_label(label, rows):
+        row_label = label
+        suffix = 2
+        while row_label in rows:
+            row_label = f"{label} ({suffix})"
+            suffix += 1
+        return row_label
+
+    def extract_rows(node, container_name):
+        # Recursively walk down through "container" elements until repeated
+        # (list) XML elements are found; each item of such a list becomes
+        # its own row in the output table, so that multiple rows in the XML
+        # become multiple rows in JSON, instead of being merged into one.
+        rows = {}
+        loose = {}
+        if not isinstance(node, dict):
+            return rows
+
+        for key, value in node.items():
+            if key == "#text":
+                loose[container_name] = value
+                continue
+            col_key = strip_attr_prefix(key)
+            if isinstance(value, list):
+                for i, item in enumerate(value):
+                    label = unique_row_label(pick_row_label(item, f"{col_key}_{i}"), rows)
+                    rows[label] = flatten(item)
+            elif isinstance(value, dict):
+                if contains_list(value):
+                    rows.update(extract_rows(value, col_key))
+                else:
+                    rows[col_key] = flatten(value)
+            else:
+                loose[col_key] = value
+
+        if loose:
+            if len(rows) == 1:
+                next(iter(rows.values())).update(loose)
+            else:
+                rows[unique_row_label(container_name, rows)] = loose
+
+        return rows
+
+    try:
+        parsed_dict = xmltodict.parse(open(xmlfile).read())
+    except Exception as e:
+        print(f"Error parsing XML file {xmlfile}: {e}")
+        json.dump({}, open(outfile, "w"))
+        exit(0)
+
+    if not parsed_dict:
+        json.dump({}, open(outfile, "w"))
+        exit(0)
+
+    root_key = next(iter(parsed_dict))
+    root_content = parsed_dict[root_key]
+
+    def camel_to_title(name):
+        # "FeatureCountsTable" -> "Feature Counts Table"
+        return re.sub(r'(?<!^)(?=[A-Z])', ' ', name)
+
+    rows = extract_rows(root_content, root_key)
+    if not rows:
+        rows = {outname: flatten(root_content)}
+    elif len(rows) == 1:
+        rows = {outname: next(iter(rows.values()))}
+
+    out = {
+        "id": outname,
+        "section_name": camel_to_title(root_key),
+        "plot_type": "table",
+        "pconfig": {
+            "id": f"{outname}_table",
+            "namespace": root_key,
+        },
+        "data": rows,
+    }
+    json.dump(out, open(outfile, "w"), indent=2)
+    """
+}

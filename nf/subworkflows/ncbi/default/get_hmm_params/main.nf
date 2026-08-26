@@ -7,7 +7,7 @@ include { merge_params } from '../../utilities'
 workflow get_hmm_params {
     take:
         taxid
-        parameters  // Map : extra parameter and parameter update
+        parameters  // Map : extra parameter and parameter update.
     main:
         def effective_taxid
         if (taxid) {

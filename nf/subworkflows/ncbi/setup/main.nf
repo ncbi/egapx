@@ -282,24 +282,57 @@ process rename_fasta_ids {
         tuple val(sampleID), path(fastx, stageAs: "reads/*")
         val  srr_id
     output:
-        tuple val(sampleID),  path ('output/*')  , emit: 'fasta_pair_list'
+        tuple val(sampleID), path('output/*'), emit: 'fasta_pair_list'
+        path 'run_metadata.dat', emit: 'metadata'
+        path 'run_id_map.tsv',   emit: 'id_map'
     script:
-        def file_name = fastx.getBaseName()
-        if (!file_name.endsWith(".fasta")) {
-            file_name += ".fasta"
-        }
+        // Normalize input to a list so single-end and paired-end are handled uniformly.
+        def files = (fastx instanceof List) ? fastx : [fastx]
         def srrFmt = String.format('SRR%08d', (srr_id as int))
+
+        // Build one seqkit pipeline per mate file. Mate number comes from POSITION:
+        // index 0 -> mate 1, index 1 -> mate 2. Both producers (fromFilePairs {1,2}
+        // and fetch_sra_fasta's transpose) emit mate 1 first, mate 2 second.
+        // Output filenames preserve the mate marker so path('output/*') re-emits a
+        // list of the same arity, matching fetch_sra_fasta's contract.
+        def paired = files.size() > 1
+        def convert_cmds = files.withIndex().collect { f, idx ->
+            def mate = idx + 1                                  // 1-based mate number
+            def base = f.getBaseName()
+            if (!base.endsWith(".fasta")) { base += ".fasta" }
+            def out_name = paired ? "${srrFmt}_${mate}.fasta" : "${srrFmt}.fasta"
+            // .{nr}.<mate> mirrors fasterq-dump's >gnl|SRA|\$ac.\$si.\$ri header,
+            // so mate identity is preserved in the renamed IDs (was hardcoded .1 before).
+            "seqkit fq2fa -j 7 '${f}' | seqkit replace -j 7 -w 0 -p '.*' -r 'gnl|SRA|${srrFmt}.{nr}.${mate}' > output/${out_name}"
+        }
+        def convert_block = convert_cmds.join('\n    ')
+
+        // Metadata: paired vs unpaired, and total read/base counts across all mates.
+        def pairing = paired ? 'paired' : 'unpaired'
     """
     mkdir -p output
-    seqkit fq2fa -j 7 '${fastx}' | seqkit replace -j 7 -w 0 -p '.*' -r 'gnl|SRA|${srrFmt}.{nr}.1' > output/${file_name}
+    ${convert_block}
+
+    read_count=\$(grep -ch '^>' output/*.fasta | awk '{s+=\$1} END {print s+0}')
+    base_count=\$(grep -hv '^>' output/*.fasta | wc -c)
+    printf '%s\\tNA\\t${pairing}\\t%s\\t%s\\tNA\\tNA\\tNA\\tNA\\tNA\\tNA\\tSAMN_${srrFmt}\\t0\\tNA\\tNA\\t0\\tNA\\n' '${srrFmt}' "\$read_count" "\$base_count" > run_metadata.dat
+    printf '%s\\t%s\\n' '${srrFmt}' '${sampleID}' > run_id_map.tsv
     """
     stub:
-        def file_name = fastx.getBaseName()
-        if (!file_name.endsWith(".fasta")) {
-            file_name += ".fasta"
+        def files = (fastx instanceof List) ? fastx : [fastx]
+        def srrFmt = String.format('SRR%08d', (srr_id as int))
+        def paired = files.size() > 1
+        def touch_cmds = files.withIndex().collect { f, idx ->
+            def mate = idx + 1
+            def out_name = paired ? "${srrFmt}_${mate}.fasta" : "${srrFmt}.fasta"
+            "echo '${srr_id}' > output/${out_name}"
         }
+        def touch_block = touch_cmds.join('\n    ')
+        def pairing = paired ? 'paired' : 'unpaired'
     """
     mkdir -p output
-    echo $srr_id > output/$file_name
+    ${touch_block}
+    printf '%s\\tNA\\t${pairing}\\t0\\t0\\tNA\\tNA\\tNA\\tNA\\tNA\\tNA\\tSAMN_${srrFmt}\\t0\\tNA\\tNA\\t0\\tNA\\n' '${srrFmt}' > run_metadata.dat
+    printf '%s\\t%s\\n' '${srrFmt}' '${sampleID}' > run_id_map.tsv
     """
 }

@@ -19,6 +19,7 @@ workflow busco {
         run_busco(proteins, lineage, lineage_download, parameters)
     emit:
         results = run_busco.out.results
+        log_file = run_busco.out.log_file
 }
 
 
@@ -32,6 +33,7 @@ process run_busco {
         val  parameters
     output:
         path "output/*", emit: 'results'
+        path "output/*.txt", emit: 'log_file'
     script:
     """
     download_params=''

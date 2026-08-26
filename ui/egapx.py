@@ -12,10 +12,10 @@ import re
 import time
 import datetime
 from collections import defaultdict
-from ftplib import FTP
 import ftplib
 from pathlib import Path
 from typing import List
+from enum import IntEnum
 from urllib.request import urlopen
 from urllib.parse import quote, urlparse
 import json
@@ -35,7 +35,7 @@ import tempfile
 from html.parser import HTMLParser
 
 class SraMetadata(NamedTuple):
-    """Metadata for an SRA run or synthetic equivalent for non-SRA reads."""
+    """Metadata for an SRA run or synthetic equivalent for non-SRA reads"""
     run_accession: str
     sample_accession: str
     layout: str  # 'paired' or 'unpaired'
@@ -72,7 +72,7 @@ def safe_urlretrieve(url, filename):
 # Requires pip install -r requirements.txt
 import yaml
 
-software_version = "0.5.2"
+software_version = "1.0"
 DEFAULT_DATA_VERSION = "current_1"
 
 start_time = time.time()
@@ -84,32 +84,33 @@ verbosity = VERBOSITY_DEFAULT
 
 
 # Clades with special treatment
-MAGNOLIOPSIDA = 3398
-ACTINOPTERYGII = 7898
-COELACANTHIMORPHA = 118072
-CHONDRICHTHYES = 7777
-DIPNOMORPHA = 7878
-FISH = {ACTINOPTERYGII, COELACANTHIMORPHA, CHONDRICHTHYES, DIPNOMORPHA}
-PRIMATE = 9443
-MAMMAL = 40674
-RODENT = 9989
-VERTEBRATE = 7742
-ANIMALS = 33208   
-## define gbdiv_inv as has ANIMALS but not VERTEBRATE
-INSECTA = 50557
-ARTHROPOD = 6656
-VIRIDIPLANTAE = 33090
-LEPIDOSAURS = 8504 
-AMPHIBIANS = 8292 
-ECHINODERMATA = 7586
+class TaxID(IntEnum):
+    MAGNOLIOPSIDA = 3398
+    ACTINOPTERYGII = 7898
+    COELACANTHIMORPHA = 118072
+    CHONDRICHTHYES = 7777
+    DIPNOMORPHA = 7878
+    PRIMATE = 9443
+    MAMMAL = 40674
+    RODENT = 9989
+    VERTEBRATE = 7742
+    ANIMALS = 33208
+    INSECTA = 50557
+    ARTHROPOD = 6656
+    VIRIDIPLANTAE = 33090
+    LEPIDOSAURS = 8504
+    AMPHIBIANS = 8292
+    ECHINODERMATA = 7586
+    H_SAPIENS = 9606
+    M_MUSCULUS = 10090
+    D_RERIO = 7955
+    D_MELANOGASTER = 7227
+    A_THALIANA = 3702
+    C_ELEGANS = 6239
 
-# Reference organisms
-H_SAPIENS = 9606
-M_MUSCULUS = 10090
-D_RERIO = 7955
-D_MELANOGASTER = 7227
-A_THALIANA = 3702
-C_ELEGANS = 6239
+
+FISH = {TaxID.ACTINOPTERYGII, TaxID.COELACANTHIMORPHA, TaxID.CHONDRICHTHYES, TaxID.DIPNOMORPHA}
+## define gbdiv_inv as has ANIMALS but not VERTEBRATE
 
 BUSCO_DATA_URL = "https://busco-data.ezlab.org/v5/data"
 FTP_EGAP_PROTOCOL = "https"
@@ -122,6 +123,8 @@ SRA_DOWNLOAD_FOLDER = 'sra_dir'
 SRA_RUNS_FILE = 'runs.yaml'
 SRA_METADATA_FILE = 'metadata.yaml'
 SRA_QUERIES_FILE = 'queries.yaml'
+GENOME_DOWNLOAD_FOLDER = 'genomes'
+GENOME_RUNS_FILE = 'genome.yaml'
 
 # Soft limit for SRA queries, can be overridden by --force
 RNASEQ_QUERY_LIMIT = int(os.environ.get('EGAPX_RNASEQ_QUERY_LIMIT', '20'))
@@ -153,6 +156,7 @@ def parse_args(argv):
     group = parser.add_argument_group('download')
     group.add_argument("-dl", "--download-only", help="Download external files to local storage, so that future runs can be isolated", action="store_true", default=False)
     group.add_argument("-dn", "--download-needed", dest='download_needed', help="Download only data needed by the current input into local cache", action="store_true", default=False)
+    group.add_argument("--no-busco-download", dest='no_busco_download', help="Skip downloading BUSCO files when using -dl or -dn", action="store_true", default=False)
     parser.add_argument("-lc", "--local-cache", help="Where to store the downloaded files", default="")
     parser.add_argument("-q", "--quiet", dest='verbosity', action='store_const', const=VERBOSITY_QUIET, default=VERBOSITY_DEFAULT)
     parser.add_argument("-v", "--verbose", dest='verbosity', action='store_const', const=VERBOSITY_VERBOSE, default=VERBOSITY_DEFAULT)
@@ -160,6 +164,8 @@ def parse_args(argv):
     parser.add_argument("-fn", "--func_name", help="func_name", default="")
     parser.add_argument("--force", dest='force', help="Force execution despite of warnings", action='store_true', default=False)
     parser.add_argument("--ftp", dest='ftp', help="Enable FTP mode", action='store_true', default=False)
+    parser.add_argument("-b", "--busco-downloads", dest='busco_downloads', help="Path to BUSCO lineage downloads directory", default="")
+    parser.add_argument("--no-config-check", dest='no_config_check', help="Bypass config consistency checks, only verify executor config exists", action='store_true', default=False)
     
     return parser.parse_args(argv[1:])
 
@@ -174,7 +180,7 @@ class FtpDownloader:
         self.reconnect() 
 
     def reconnect(self):
-        self.ftp = FTP(self.host)
+        self.ftp = ftplib.FTP(self.host)
         self.ftp.login()
         self.ftp.set_debuglevel(0)
        
@@ -269,7 +275,7 @@ class FtpDownloader:
         fl = []
         try: 
             fl = self.ftp.mlsd(ftp_path)
-        except:
+        except ftplib.all_errors:
             return list()
         rl = list()
         for ftp_item in fl:
@@ -565,7 +571,7 @@ def repackage_inputs(run_inputs):
     new_inputs = {}
     new_inputs['input'] = {}
     for key in run_inputs:
-        if key not in { 'tasks', 'output' }:
+        if key not in { 'tasks', 'output', 'process' }:
             new_inputs['input'][key] = run_inputs[key]
         else:
             new_inputs[key] = run_inputs[key]
@@ -708,7 +714,7 @@ path_inputs = {'genome', 'hmm', 'softmask', 'reads_metadata', 'short_reads_metad
                'proteins', 'proteins_trusted', 'additional_proteins', 'reads', 'short_reads', 'long_reads',
                'rnaseq_alignments', 'protein_alignments', 'ortho', 'reference_sets', 'prot_denylist',
                'name_cleanup_rules_file', 'gnomon_filtering_scores_file', 'busco_lineage_download',
-               'cmsearch'}
+               'cmsearch', 'assembly_taxid_list', 'proteins_accessions_list' }
 def convert_paths(run_inputs):
     "Convert paths to absolute paths where appropriate"
     return convert_paths_for_executor(run_inputs)
@@ -796,9 +802,15 @@ def stage_inputs_bulk(staging_plan, verbosity=VERBOSITY_DEFAULT):
                 elif src_scheme != 's3':
                     return False, f"Unsupported staging source scheme '{src_scheme}' for {src}"
 
+                pr = 0
                 try:
+                    upload_cmd = ["aws", "s3", "cp"] 
+                    if os.path.isdir(upload_src):
+                        upload_cmd.append("--recursive")
+                    upload_cmd.append(upload_src)
+                    upload_cmd.append(dst)
                     subprocess.run(
-                        ["aws", "s3", "cp", upload_src, dst],
+                        upload_cmd,
                         check=True,
                         stdout=None if verbosity >= VERBOSITY_VERBOSE else subprocess.DEVNULL,
                         stderr=None if verbosity >= VERBOSITY_VERBOSE else subprocess.DEVNULL,
@@ -806,7 +818,7 @@ def stage_inputs_bulk(staging_plan, verbosity=VERBOSITY_DEFAULT):
                 except FileNotFoundError:
                     return False, "AWS CLI not found in PATH, required for staging uploads to s3://"
                 except subprocess.CalledProcessError:
-                    return False, f"Failed to upload staged input {upload_src} -> {dst} using aws s3 cp"
+                    return False, f"Failed to upload staged input {upload_src} -> {dst} using aws s3 cp " 
                 continue
 
             if dst_scheme in {'gs', 'az'}:
@@ -865,15 +877,27 @@ def flatten_list(nested_list):
             flattened_data.append(element)
     return flattened_data
 
+
+def _has_reads_definition(run_inputs, reads_type):
+    key_ids = f"{reads_type}_ids"
+    key_query = f"{reads_type}_query"
+    return reads_type in run_inputs['input'] or key_ids in run_inputs['input'] or key_query in run_inputs['input']
+
 def prepare_reads(run_inputs, force=False, **kw):
     """Reformat reads input to be in 'fromFilePairs' format expected by egapx, i.e. [sample_id, [read1, read2]]
     Generate reads metadata file with minimal information - paired/unpaired and valid for existing libraries"""
     for_download = kw.get('for_download', False)
     res, msg, sras, nosra = True, '', list(), list()
-    res1, msg1, sra1, nosra1 = prepare_reads_by_type(run_inputs, 'reads', 'short_reads', **kw)
-    res, msg, sras, nosra = res & res1, msg + msg1, sras + sra1, nosra + nosra1 
-    res1, msg1, sra1, nosra1 = prepare_reads_by_type(run_inputs, 'short_reads', None, **kw)
+
+    # Process either legacy reads* keys OR short_reads* keys, but not both.
+    # The validator disallows mixed definitions, and processing both would
+    # re-handle the same short-read sets.
+    if _has_reads_definition(run_inputs, 'reads'):
+        res1, msg1, sra1, nosra1 = prepare_reads_by_type(run_inputs, 'reads', 'short_reads', **kw)
+    else:
+        res1, msg1, sra1, nosra1 = prepare_reads_by_type(run_inputs, 'short_reads', None, **kw)
     res, msg, sras, nosra = res & res1, msg + msg1, sras + sra1, nosra + nosra1
+
     res1, msg1, sra1, nosra1  = prepare_reads_by_type(run_inputs, 'long_reads', None, **kw)
     res, msg, sras, nosra = res & res1, msg + msg1, sras + sra1, nosra + nosra1 
 
@@ -983,7 +1007,6 @@ def _pop_reads_input(run_inputs, reads_type):
 
 def _parse_reads_table_file(filename):
     prefixes = defaultdict(list)
-    sra_to_return = []
     with open(filename) as f:
         for line in f:
             line = line.strip()
@@ -996,7 +1019,7 @@ def _parse_reads_table_file(filename):
             files_part = mo.group(2).strip()
             files = files_part.split()
             prefixes[sample].extend(files)
-    return prefixes, sra_to_return
+    return prefixes
 
 
 def _handle_query_string(reads_query, reads_type_write, run_inputs, run_filter=None):
@@ -1013,8 +1036,8 @@ def _collect_from_flat_list_entry(rf, prefixes, sra_to_return, msg):
         mo = re.match(r'([^._]+)', name)
         if mo and mo.group(1) != name:
             run_name = mo.group(1)
-            if is_sra(run_name):
-                sra_to_return.append(run_name)
+            # Explicit file-backed inputs must use synthetic metadata even if
+            # sample/run ids resemble SRA accessions.
             prefixes[run_name].append(rf)
             return True, msg
         elif is_sra(rf):
@@ -1072,8 +1095,6 @@ def _process_list_reads(reads: list, prefixes: defaultdict(list), sra_to_return:
                         msg += f"Invalid read input {r}\n"
                         return False, msg
                     prefixes[run_name].append(r)
-                if is_sra(run_name):
-                    sra_to_return.append(run_name)
             else:
                 try:
                     sample_id = _infer_sample_id_from_file_list(rf)
@@ -1147,7 +1168,7 @@ def prepare_reads_by_type(run_inputs, reads_type, reads_type_write=None, **kw):
     if isinstance(reads, str):
         if os.path.exists(reads):
             has_files = True
-            prefixes, sra_to_return = _parse_reads_table_file(reads)
+            prefixes = _parse_reads_table_file(reads)
         else:
             has_files, prefixes, sra_to_return, sra_metadata_map, add_msg = _handle_query_string(
                 reads, reads_type_write, run_inputs
@@ -1196,23 +1217,23 @@ def get_symbol_format_class_for_taxid(taxid):
     #    print(f'  ct:  {tt} {lineage.count(tt)}')
    
     is_fish = [i for i in lineage if i in FISH]
-    is_invert = (ANIMALS in lineage) and not (VERTEBRATE in lineage)
+    is_invert = (TaxID.ANIMALS in lineage) and not (TaxID.VERTEBRATE in lineage)
     
     #print(f'is_fish: {is_fish}')
     #print(f'is_invert: {is_invert}')
-    #print(f'ANIM: {(ANIMALS in lineage)}')
-    #print(f'VERT: {(VERTEBRATE in lineage)}')
-    #print(f'INSE: {(INSECTA in lineage)}')
-    #print(f'ARTH: {(ARTHROPOD in lineage)}')
-    #print(f'LEPI: {(LEPIDOSAURS in lineage)}')
-    #print(f'AMPH: {(AMPHIBIANS in lineage)}')
+    #print(f'ANIM: {(TaxID.ANIMALS in lineage)}')
+    #print(f'VERT: {(TaxID.VERTEBRATE in lineage)}')
+    #print(f'INSE: {(TaxID.INSECTA in lineage)}')
+    #print(f'ARTH: {(TaxID.ARTHROPOD in lineage)}')
+    #print(f'LEPI: {(TaxID.LEPIDOSAURS in lineage)}')
+    #print(f'AMPH: {(TaxID.AMPHIBIANS in lineage)}')
 
     format_class = 'allupper'
-    if is_invert and (INSECTA in lineage or ARTHROPOD in lineage):
+    if is_invert and (TaxID.INSECTA in lineage or TaxID.ARTHROPOD in lineage):
         format_class = 'NULL'
-    elif (RODENT in lineage) or is_invert:
+    elif (TaxID.RODENT in lineage) or is_invert:
         format_class = 'uplow'
-    elif (LEPIDOSAURS in lineage) or (AMPHIBIANS in lineage) or is_fish:
+    elif (TaxID.LEPIDOSAURS in lineage) or (TaxID.AMPHIBIANS in lineage) or is_fish:
         format_class = 'alllow'
 
     #print('x:get_symbol_format_class_for_taxid')
@@ -1272,7 +1293,7 @@ def expand_and_validate_params(run_inputs):
             best_n = 10
         best_n = int(inputs.get('proteins_best_n_orgs', best_n))
         
-        proteins, trusted, taxid_filter = get_closest_protein_bag(
+        proteins, trusted, taxid_filter, assembly_taxid_list_file, protein_list_file = get_closest_protein_bag(
             taxid, best_n, set(map(int, inputs.get('proteins_deny_taxids', []))))
         if not proteins:
             # Proteins are not specified explicitly and not found by taxid
@@ -1285,6 +1306,10 @@ def expand_and_validate_params(run_inputs):
             inputs['proteins_trusted'] = trusted
         if taxid_filter:
             inputs['proteins_filter_taxons'] = taxid_filter
+        if assembly_taxid_list_file:
+            inputs['assembly_taxid_list'] = assembly_taxid_list_file
+        if protein_list_file:
+            inputs['proteins_accessions_list'] = protein_list_file
 
     short_read_keys = {'short_reads', 'short_reads_ids', 'short_reads_query',
                        'reads', 'reads_ids', 'reads_query'}
@@ -1341,10 +1366,10 @@ def expand_and_validate_params(run_inputs):
         inputs['prot_denylist'] = get_file_path('reference_sets', 'swissprot_organelle_bacteria.gi')
 
     if inputs.get('cmsearch', {}).get('enabled'):
-        inputs['cmsearch'] = {'files': [get_file_path('cmsearch', f) for f in "Rfam.seed rfam1410.cm rfam1410_amendments.xml".split()] }
+        inputs['cmsearch'] = {'files': [get_file_path('cmsearch', f) for f in "Rfam.seed rfam151.cm rfam151_amendments.xml".split()] }
         inputs['cmsearch']['enabled'] = True
         if len(inputs['cmsearch']['files']) != 3:
-            print(f"ERROR: Expected 3 cmsearch files (Rfam.seed, rfam1410.cm, rfam1410_amendments.xml), but found {len(inputs['cmsearch']['files'])}.")
+            print(f"ERROR: Expected 3 cmsearch files (Rfam.seed, rfam151.cm, rfam151_amendments.xml), but found {len(inputs['cmsearch']['files'])}.")
             print("  Check that the cmsearch data files are properly configured.")
             return False
     else:
@@ -1429,22 +1454,150 @@ def get_file_path(subsystem, filename):
     return file_url
 
 
+def write_runtime_process_conf(process_params, out_dir):
+
+    ret_file_name = str(Path(out_dir)/'runtime.conf') 
+    print("A: ", ret_file_name)
+    print("B: ", process_params)
+
+    with open(ret_file_name, 'w') as fo:
+        print("process {", file=fo)
+        for param_name in ['small_mem', 'med_mem', 'large_mem']:
+            if param_name in process_params:
+                print(f"\twithLabel: '{param_name}' {{\n\t\tmemory = {process_params[param_name]}\n\t}}\n", file=fo)
+        print("}", file=fo)
+    return ret_file_name
+
+
+def _sha1_file(path):
+    h = hashlib.sha1()
+    with open(path, 'rb') as f:
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _load_user_config_fingerprint_map(script_directory):
+    info_file = Path(script_directory) / 'assets' / 'config' / 'user_config_info.yaml'
+    if not info_file.exists():
+        return {}
+    try:
+        with open(info_file, 'rt') as f:
+            data = yaml.safe_load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _is_known_original_user_config(digest, basename, fingerprint_map):
+    if digest not in fingerprint_map:
+        return False
+    by_basename = fingerprint_map[digest]
+    if not isinstance(by_basename, dict) or basename not in by_basename:
+        return False
+
+    entries = by_basename[basename]
+    if not isinstance(entries, list):
+        return False
+
+    for item in entries:
+        if not isinstance(item, (list, tuple)) or len(item) < 2:
+            continue
+        dir_path = str(item[0]).replace('\\', '/')
+        if dir_path.endswith('ui/assets/config/user'):
+            return True
+    return False
+
+
+def sync_user_config_dir(script_directory, config_dir, release_tag, verbosity=VERBOSITY_DEFAULT):
+    """Ensure user config directory exists and is fresh for the current release tag.
+
+    For stale configs, replace files that are known originals and preserve user-modified
+    files as backups before installing the new defaults.
+    """
+    from_dir = Path(script_directory) / 'assets' / 'config' / 'user'
+    tag_file = Path(config_dir) / '.egapx_release_tag'
+    config_dir_path = Path(config_dir)
+
+    if not from_dir.is_dir():
+        print(f"ERROR: Missing default user config directory: {from_dir}")
+        return False
+
+    if not config_dir_path.is_dir():
+        if not os.path.exists(config_dir):
+            os.mkdir(config_dir)
+        for f in sorted(from_dir.iterdir()):
+            if f.is_file():
+                shutil.copy2(f, config_dir_path / f.name)
+        tag_file.write_text(release_tag + "\n", encoding='utf-8')
+        print(f"Edit config files in {config_dir} to reflect your actual configuration, then repeat the command")
+        return False
+
+    current_tag = ''
+    if tag_file.is_file():
+        current_tag = tag_file.read_text(encoding='utf-8').strip()
+
+    if current_tag == release_tag:
+        return True
+
+    fingerprint_map = _load_user_config_fingerprint_map(script_directory)
+    timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    modified_backups = []
+
+    for src_file in sorted(from_dir.iterdir()):
+        if not src_file.is_file():
+            continue
+        dst_file = config_dir_path / src_file.name
+
+        if not dst_file.exists():
+            shutil.copy2(src_file, dst_file)
+            continue
+
+        src_sha = _sha1_file(src_file)
+        dst_sha = _sha1_file(dst_file)
+        if src_sha == dst_sha:
+            continue
+
+        if _is_known_original_user_config(dst_sha, src_file.name, fingerprint_map):
+            shutil.copy2(src_file, dst_file)
+            continue
+
+        backup_base = f"{dst_file.stem}.user_modified_from_{current_tag or 'unknown'}_{timestamp}{dst_file.suffix}"
+        backup_file = config_dir_path / backup_base
+        suffix_id = 1
+        while backup_file.exists():
+            backup_file = config_dir_path / f"{dst_file.stem}.user_modified_from_{current_tag or 'unknown'}_{timestamp}_{suffix_id}{dst_file.suffix}"
+            suffix_id += 1
+
+        shutil.copy2(dst_file, backup_file)
+        shutil.copy2(src_file, dst_file)
+        modified_backups.append((dst_file.name, backup_file.name))
+
+    tag_file.write_text(release_tag + "\n", encoding='utf-8')
+
+    if modified_backups:
+        print(f"WARNING: Detected user-modified config files in {config_dir} while updating to release tag {release_tag}.")
+        for file_name, backup_name in modified_backups:
+            print(f"  Preserved your previous {file_name} as {backup_name}")
+        print("Please merge your changes from the preserved file(s) into the new config file(s).")
+        return False
+    elif verbosity >= VERBOSITY_VERBOSE:
+        print(f"Updated user config files in {config_dir} for release tag {release_tag}")
+
+    return True
+
+
 def get_config(script_directory, args):
     config_file = ""
     config_dir = args.config_dir if args.config_dir else os.environ.get("EGAPX_CONFIG_DIR")
     if not config_dir:
         config_dir = Path(os.getcwd()) / "egapx_config"
-    if not Path(config_dir).is_dir():
-        # Create directory and copy user config files there
-        from_dir = Path(script_directory) / 'assets' / 'config' / 'user'
-        if args.verbosity >= VERBOSITY_VERBOSE:
-            print(f"Copy config files from {from_dir} to {config_dir}")
-        if not args.dry_run:
-            os.mkdir(config_dir)
-            ld = os.listdir(from_dir)
-            for f in ld:
-                shutil.copy2(from_dir / f, config_dir)
-            print(f"Edit config files in {config_dir} to reflect your actual configuration, then repeat the command")
+    if not getattr(args, 'no_config_check', False):
+        release_tag = get_software_version()
+        if not sync_user_config_dir(script_directory, config_dir, release_tag, verbosity=args.verbosity):
             return ""
     config_file = Path(config_dir) / (args.executor + '.config')
     if not config_file.is_file():
@@ -1645,12 +1798,12 @@ def check_supported_taxid(taxid):
     return False, f"ERROR: Input taxid not within supported range. Must be under {supported_names} according to NCBI Taxonomy (https://www.ncbi.nlm.nih.gov/taxonomy)"
 
 
-def compare_lineages(ln1, ln2):
-    min_common_len = min(len(ln1), len(ln2))
-    for i in range(min_common_len):
-        if ln1[i] != ln2[i]:
-            return i - 1
-    return min_common_len - 1
+def deepest_lineage_match(query_lineage, candidate_lineage):
+    candidate_taxa = set(candidate_lineage)
+    for i in range(len(query_lineage) - 1, -1, -1):
+        if query_lineage[i] in candidate_taxa:
+            return i
+    return -1
 
 
 def get_protein_filter(
@@ -1664,7 +1817,6 @@ def get_protein_filter(
     org_matches = []
     # To preserve original order in file for organisms with the same score
     ordinal = 0
-    max_pos = len(lineage)
     bin_file = get_tax_file("target_proteins", f"{bin_taxid}.assembly.taxid.list")
     taxid_name_map = {}
     layed_out_records = []
@@ -1681,21 +1833,22 @@ def get_protein_filter(
             continue
         org_lineage = list(map(int, lineage_str.split(';')))
         org_lineage.append(t)
-        score = max_pos - compare_lineages(lineage, org_lineage)
+        # Negate so ascending sort keeps deepest lineage matches first.
+        score = -deepest_lineage_match(lineage, org_lineage)
         if t == 10090:
             layed_out_records.append((score, ordinal, t, name))
         else:
             org_matches.append((score, ordinal, t, name))
         taxid_name_map[t] = name
         ordinal += 1
-    mandatory_taxids = {H_SAPIENS, M_MUSCULUS, D_RERIO, D_MELANOGASTER, A_THALIANA, C_ELEGANS}
+    mandatory_taxids = {TaxID.H_SAPIENS, TaxID.M_MUSCULUS, TaxID.D_RERIO, TaxID.D_MELANOGASTER, TaxID.A_THALIANA, TaxID.C_ELEGANS}
     # To make sure that both H_SAPIENS and M_MUSCULUS are not in the list
     # we add M_MUSCULUS only if we did not see H_SAPIENS
-    if H_SAPIENS not in taxid_name_map:
+    if TaxID.H_SAPIENS not in taxid_name_map:
         org_matches += layed_out_records
     else:
         # Exclude M_MUSCULUS if H_SAPIENS is present
-        mandatory_taxids -= {M_MUSCULUS}
+        mandatory_taxids -= {TaxID.M_MUSCULUS}
     org_matches.sort()
     # print(f"org_matches: {org_matches}")
     # Select best_n first entries from the sorted org_matches,
@@ -1716,7 +1869,7 @@ def get_closest_protein_bag(taxid, best_n, deny_set={}):
 
     """
     # print(f"get_closest_protein_bag({taxid}, {best_n}, {deny_set})")
-    no_result = '', '', []
+    no_result = '', '', [], '', ''
     if not taxid:
         return no_result
 
@@ -1762,10 +1915,14 @@ def get_closest_protein_bag(taxid, best_n, deny_set={}):
     # print(f"protein_filter: {protein_filter}, protein_filter_set: {protein_filter_set}")
     if new_format_protein_bins:
         protein_file = get_file_path("target_proteins", f"{best_taxid}.proteins.faa.gz")
+        assembly_taxid_list_file = get_file_path("target_proteins", f"{best_taxid}.assembly.taxid.list")
+        protein_list_file = get_file_path("target_proteins", f"{best_taxid}.protein.list")
     else:
         protein_file = get_file_path("target_proteins", f"{best_taxid}.faa.gz")
+        assembly_taxid_list_file = ''
+        protein_list_file = ''
     trusted_file = get_file_path("target_proteins", f"{best_taxid}.trusted_proteins.gi")
-    return protein_file, trusted_file, protein_filter
+    return protein_file, trusted_file, protein_filter, assembly_taxid_list_file, protein_list_file
 
 
 def get_closest_hmm(taxid):
@@ -1805,7 +1962,7 @@ def get_closest_hmm(taxid):
 
     lineage, ranks = get_lineage_with_ranks(taxid)
 
-    is_mammal = MAMMAL in lineage
+    is_mammal = TaxID.MAMMAL in lineage
     best_lineage = []
     best_taxid = None
     best_score = 0
@@ -1862,7 +2019,7 @@ def get_closest_ortho_ref_taxid(taxid):
 
     lineage, ranks = get_lineage_with_ranks(taxid)
     
-    is_mammal = MAMMAL in lineage
+    is_mammal = TaxID.MAMMAL in lineage
     # best_lineage = None
     # best_good_match = False
     best_taxid = None
@@ -1928,7 +2085,8 @@ def check_busco_lineage_in_lineages_path(lineages_path, lineage):
             line = line.strip()
             if not line:
                 continue
-            if not os.path.exists(os.path.join(lineages_path, line)):
+            line_path = os.path.join(lineages_path, line)
+            if not os.path.exists(line_path) and not os.path.islink(line_path):
                 return False
     return True
 
@@ -2037,9 +2195,9 @@ def get_max_intron(taxid):
     if not taxid:
         return 0, 0
     lineage = get_lineage(taxid)
-    if VIRIDIPLANTAE in lineage:
+    if TaxID.VIRIDIPLANTAE in lineage:
         return 300000, 3000000000
-    elif VERTEBRATE in lineage:
+    elif TaxID.VERTEBRATE in lineage:
         return 1200000, 2000000000
     else:
         return 600000, 500000000
@@ -2360,7 +2518,24 @@ def read_cache() -> tuple[dict[str, list[str]], dict[str, list[str]], dict[str, 
         if not g_sra_to_file_map:
             sra_runs_file = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER, SRA_RUNS_FILE)
             if os.path.isfile(sra_runs_file):
-                g_sra_to_file_map = yaml.safe_load(open(sra_runs_file, 'r'))
+                raw_sra_to_file_map = yaml.safe_load(open(sra_runs_file, 'r')) or {}
+                sra_files_dir = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER)
+                g_sra_to_file_map = {}
+                for run_accession, file_list in raw_sra_to_file_map.items():
+                    resolved_files = []
+                    for file_path in file_list:
+                        # Prefer location-independent paths under the current cache dir,
+                        # while keeping compatibility with legacy absolute-path entries.
+                        if os.path.isabs(file_path):
+                            candidate = os.path.join(sra_files_dir, os.path.basename(file_path))
+                        else:
+                            candidate = os.path.join(sra_files_dir, file_path)
+
+                        if os.path.isfile(candidate):
+                            resolved_files.append(candidate)
+                        elif os.path.isfile(file_path):
+                            resolved_files.append(file_path)
+                    g_sra_to_file_map[run_accession] = resolved_files
         if not g_query_to_accessions_map:
             sra_queries_file = os.path.join(cache_dir, SRA_DOWNLOAD_FOLDER, SRA_QUERIES_FILE)
             if os.path.isfile(sra_queries_file):
@@ -2484,7 +2659,8 @@ def save_sra_metadata_file(dest, sras, non_sras):
             
         for ns in non_sras:
             if ns and ns.run_accession not in seen_sras:
-                print(TAB.join(str(x) for x in ns), file=outf) 
+                print(TAB.join(str(x) for x in ns), file=outf)
+                seen_sras.add(ns.run_accession)
      
 
 def expand_sra_query(query, run_filter=None):
@@ -2533,12 +2709,12 @@ def download_sra_query(inputs, query_key, sra_dir):
     existing_fasta_files = glob.glob(os.path.join(sra_dir, '*.fasta'))
 
     sra_runs_fn = os.path.join(sra_dir, SRA_RUNS_FILE)
+    sra_runs_dict = {}
     if os.path.exists(sra_runs_fn):
-        sra_runs_dict = yaml.safe_load(open(sra_runs_fn, 'r'))
-    else:
-        sra_runs_dict = {}
+        with open(sra_runs_fn, 'r') as f:
+            sra_runs_dict = yaml.safe_load(f) or {}
     for sra in sra_runs_list:
-        sra_runs_dict[sra] = [os.path.abspath(sra_file) for sra_file in existing_fasta_files if find_sra_name(sra_file) == sra]
+        sra_runs_dict[sra] = [os.path.relpath(sra_file, sra_dir) for sra_file in existing_fasta_files if find_sra_name(sra_file) == sra]
     if sra_runs_dict:
         Path(sra_dir).mkdir(parents=True, exist_ok=True)
         with open(sra_runs_fn, 'w') as f:
@@ -2613,6 +2789,26 @@ def download_sra_runs(sra_runs_list, sra_dir, is_long_read=False):
     print(f"{number_of_files_after - number_of_files_before} files downloaded for {read_type}")
     return 0
 
+def download_genome(cache_dir, filename):
+    """Download genome specified in the input file to local cache if it's a remote URL."""
+    if not filename:
+        return
+    datadict = yaml.safe_load(open(filename, 'r'))
+    if not datadict or 'genome' not in datadict:
+        return
+    genome_path = datadict['genome']
+    if genome_path.startswith("ftp://") or genome_path.startswith("http://") or genome_path.startswith("https://"):
+        genome_dir =  os.path.join(cache_dir, GENOME_DOWNLOAD_FOLDER)
+        os.makedirs(genome_dir, exist_ok=True)
+        downloader = HttpsDownloader(verbosity=verbosity)
+        new_file_path = os.path.join(genome_dir, os.path.basename(genome_path))
+        downloader.download_file(genome_path, new_file_path)
+        genome_mft = os.path.join(genome_dir, GENOME_RUNS_FILE)
+        print(f"Downloaded genome to {new_file_path}, writing manifest to {genome_mft}")
+        with open(genome_mft, 'w') as f:
+            yaml.dump({'genome': new_file_path}, f)
+            f.flush()
+
 
 def download_offline_data(args):
     """
@@ -2649,6 +2845,7 @@ def download_offline_data(args):
         return 0
     os.makedirs(args.local_cache, exist_ok=True)
     download_egapx_data(args.local_cache, args.data_version, args.ftp)
+    download_genome(args.local_cache, args.filename)
     # Set the global cache directory so load_version_map can find the manifest
     global user_cache_dir
     user_cache_dir = args.local_cache
@@ -2677,7 +2874,8 @@ def download_offline_data(args):
             sra_res = 1
 
         # Download BUSCO lineage if needed.
-        ensure_busco_lineage_for_inputs(args.local_cache, inputs)
+        if not args.no_busco_download:
+            ensure_busco_lineage_for_inputs(args.local_cache, inputs)
         return sra_res
     return 0
 
@@ -2844,7 +3042,8 @@ def download_needed_data(args):
         sra_res = 1
 
     # Handle BUSCO exactly as in full download mode.
-    ensure_busco_lineage_for_inputs(args.local_cache, inputs)
+    if not args.no_busco_download:
+        ensure_busco_lineage_for_inputs(args.local_cache, inputs)
 
     # Convert paths of processed config and cache remote sources into -lc.
     try:
@@ -2953,6 +3152,9 @@ def main(argv):
 
     if int(args.ortho_taxid) > 0:
         inputs['ortho'] = {'taxid': int(args.ortho_taxid)}
+
+    if args.busco_downloads:
+        inputs['busco_lineage_download'] = args.busco_downloads
     
     if not expand_and_validate_params(run_inputs):
         return 1
@@ -2960,7 +3162,7 @@ def main(argv):
     # In GNOMON's chainer module, the default is -minlen 165 and -minscor 25.0,
     # use -minlen 225 and -minscor 40.0 for Magnoliopsida and Vertebrates,
     lineage = get_lineage(inputs['taxid'])
-    if MAGNOLIOPSIDA in lineage or VERTEBRATE in lineage:
+    if TaxID.MAGNOLIOPSIDA in lineage or TaxID.VERTEBRATE in lineage:
         minlen = 225
         minscor = 40.0
     else:
@@ -2995,7 +3197,7 @@ def main(argv):
         # This should never happen, BUSCO lineages cover all taxids
         print(f"BUSCO lineage not found for taxid {inputs['taxid']}")
         return 1
-    
+
     cache_dir = get_cache_dir()
     if inputs.get('busco_lineage_download'):
         ok, resolved_busco_dir, err = resolve_busco_lineage_download_path(inputs['busco_lineage_download'], busco_lineage)
@@ -3015,9 +3217,24 @@ def main(argv):
             print(f"  egapx.py -lc {cache_dir} -dl {args.filename}\nto download the lineage")
             return 1
 
+    if cache_dir:
+        genome_dir =  os.path.join(cache_dir, GENOME_DOWNLOAD_FOLDER)
+        genome_mft = os.path.join(genome_dir, GENOME_RUNS_FILE)
+        if os.path.isfile(genome_mft):
+            genome_data = yaml.safe_load(open(genome_mft, 'r'))
+            if genome_data and 'genome' in genome_data:
+                inputs['genome'] = genome_data['genome']
+                if args.verbosity >= VERBOSITY_VERBOSE:
+                    print(f"Using genome from cache: {genome_data['genome']}")
+
     # Create output directory if needed
     if 'output' in run_inputs and run_inputs['output']: 
         os.makedirs(os.path.join(run_inputs['output'], 'nextflow'), exist_ok=True)
+        os.makedirs(os.path.join(run_inputs['output'], 'checkpoints'), exist_ok=True)
+
+    # Enable/Disable saving per-plane checkpoints.
+    run_inputs['input']['checkpoints_save'] = False
+    run_inputs['input']['checkpoints_dir'] = os.path.abspath(os.path.join(run_inputs['output'], 'checkpoints'))
 
     # Reformat reads into pairs in fromPairs format and add reads_metadata.tsv file
     res, reads_msg = prepare_reads(run_inputs, args.force)
@@ -3065,6 +3282,10 @@ def main(argv):
 
     if args.func_name:
         task_params['func_name'] = args.func_name
+    
+    if 'process' in  run_inputs:
+        process_conf = write_runtime_process_conf(run_inputs['process'], nextflow_out_dir)
+        config_file = f"{config_file},{process_conf}" 
 
     # Run nextflow process
     if args.verbosity >= VERBOSITY_VERBOSE:
@@ -3104,6 +3325,9 @@ def main(argv):
         nf_cmd += ["--git.commit", subprocess.check_output(['git', 'rev-parse',                 'HEAD'], text=True).strip()]
         nf_cmd += ["--git.branch", subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True).strip()]
 
+    #egapx_version =  get_software_version()
+    egapx_version = "1.0.0"
+    nf_cmd += ["--egapx_version", egapx_version]
     # Write params file
     if output:
         with open(params_file, 'w') as f:
@@ -3148,6 +3372,13 @@ def main(argv):
         print(reads_msg, end='')
     if not args.dry_run and not args.stub_run:
         print_statistics(output)
+        print(
+            "-----------------------------------------------------------------------------\n"
+            "Following review of the EGAPx annotation, we encourage you to submit your\n"
+            "annotation with your genome assembly to GenBank by following the instructions at\n"
+            "https://github.com/ncbi/egapx#submitting-egapx-annotation-to-ncbi\n"
+            "-----------------------------------------------------------------------------"
+        )
 
     return 0
 

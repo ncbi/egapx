@@ -112,7 +112,8 @@ process run_chainer {
 
 
     mkdir -p tmp/interim
-    chainer_wnode $params -start-job-id \$start_job_id  -workers ${task.ext.threads} -input-jobs ${job} -O tmp/interim -nogenbank -asn-cache tmp/asncache/ -evidence-denylist-manifest evidence_denylist.mft -gap-fill-allowlist-manifest gap_fill_allowlist.mft -param ${hmm_params} -scaffolds-manifest scaffolds.mft -trusted-genes-manifest trusted_genes.mft
+    chainer_wnode $params -start-job-id \$start_job_id  -workers ${task.ext.threads} -input-jobs ${job} -O tmp/interim -nogenbank -asn-cache tmp/asncache/ -evidence-denylist-manifest evidence_denylist.mft -gap-fill-allowlist-manifest gap_fill_allowlist.mft -param ${hmm_params} -scaffolds-manifest scaffolds.mft -trusted-genes-manifest trusted_genes.mft > rm_me.out 2> rm_me.err
+
     mkdir -p output
     cat tmp/interim/* > output/chainer_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp
@@ -127,7 +128,7 @@ process run_chainer {
 
 
 process run_gpx_make_outputs {
-    label 'single_cpu'
+    label 'gpx_submitter'
     label 'small_mem'
     input:
         path files, stageAs: "gpx_inputs/*"
@@ -143,6 +144,7 @@ process run_gpx_make_outputs {
     ls -1 gpx_inputs/* > gpx_inputs.mft
     mkdir -p output
     gpx_make_outputs $params -input-manifest gpx_inputs.mft -output output/@.#.out.gz -output-manifest output/@.mft -slices-manifest output/@_slices.mft -num-partitions ${task.ext.split_jobs}
+
     """
     stub:
     """

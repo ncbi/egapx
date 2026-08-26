@@ -29,28 +29,24 @@ process run_align_report {
         path input_metadata
         path intron_counts
         path run_stats
-        path run_list
+        val run_list
         val params
     output:
         path "rnaseq_align_report.xml", emit: "align_report"
         path "*_runs.txt", emit: "run_reports"
     script:
     """
-    ##echo "${gencoll_asn.join('\n')}" > ./gencoll_asn.mft
     echo "${input_metadata.join('\n')}" > ./input_metadata.mft
     echo "${intron_counts.join('\n')}" > ./intron_counts.mft
     echo "${run_stats.join('\n')}" > ./run_stats.mft
-    echo "${run_list.join('\n')}" > ./run_list.mft
+    echo "${run_list.join('\n')}" > ./run_list.txt
 
-    rnaseq_align_report    \
-      -gencoll-asn ${gencoll_asn}                   \
-      -input-manifest ./input_metadata.mft          \
-      -intron-counts-manifest ./intron_counts.mft   \
-      -run-stats-manifest ./run_stats.mft           \
-      -run-list-manifest ./run_list.mft             \
-      $params                                       \
-      -output ./rnaseq_align_report.xml             \
-      -run-report-output '@-RS_2023_11_rnaseq_runs.txt' 
+    rnaseq_align_report -include-pub-and-sample-name no -gencoll-asn ${gencoll_asn} -input-manifest ./input_metadata.mft -intron-counts-manifest ./intron_counts.mft -run-stats-manifest ./run_stats.mft -run-list ./run_list.txt $params -output ./rnaseq_align_report.xml -run-report-output '@-rnaseq_runs.txt'
+    # rnaseq_align_report can fail if there are no runs, so we stub the output files to avoid workflow failure
+    touch rnaseq_align_report.xml
+    if [ ! -s *_rnaseq_runs.txt ]; then
+        touch rnaseq_runs.txt
+    fi
     """
     stub:
     """

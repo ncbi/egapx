@@ -3,18 +3,23 @@ nextflow.enable.dsl=2
 
 
 include { merge_params } from '../../utilities'
+include { gp_register_stats } from '../../shared/gp_register_stats/main.nf'
 
 workflow filter_est_align {
     take:
         align_asn
+        gencoll
         parameters  // Map : extra parameter and parameter update
     main:
         String align_filter_params = merge_params('-ifmt seq-align -nogenbank', parameters, 'align_filter')
         String align_sort_params = merge_params('-ifmt seq-align -nogenbank', parameters, 'align_sort')
         align_filter(align_asn, align_filter_params)
         align_sort(align_filter.out, align_sort_params)
+        gp_register_stats(align_sort.out, gencoll, 'filter_est_align')
     emit:
         alignments = align_sort.out
+        unsorted_alignments = align_filter.out
+        stats = gp_register_stats.out.stats
 }
 
 

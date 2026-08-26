@@ -1,6 +1,31 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
 
+include { checkpoint_save; checkpoint_load_channels; CHECKPOINT_LOAD_JSON} from "./../../../../nf/lib/checkpoint_both"
+workflow cmsearch_plane_cached {
+    take:
+        genome_fasta  // path to genome fasta (can be gzipped)
+        task_params
+    main:
+        def checkpoint_dir = task_params.get('checkpoints_dir', [])
+        def checkpoint_name = 'cmsearch_plane'
+        def checkpoint_enabled = task_params.get('checkpoints_save', false)
+        def checkpoint_args = [name: checkpoint_name, dir: checkpoint_dir, enabled: checkpoint_enabled]
+        def ck_file = file("${checkpoint_dir}/${checkpoint_name}.json")
+        def out_obj=[:]
+        if (ck_file.exists()) {
+            CHECKPOINT_LOAD_JSON(checkpoint_name, checkpoint_dir)
+            def loaded = checkpoint_load_channels(checkpoint_args)
+            out_obj = loaded
+        } else {
+            cmsearch_plane(genome_fasta)
+            out_obj = cmsearch_plane.out
+            checkpoint_save([cmsearch_plane.out], checkpoint_args)
+        }
+    emit:
+        cmsearch_annots = out_obj.cmsearch_annots
+}
+
 // ----------------------------------------------------------------------------
 workflow cmsearch_plane
 {
@@ -113,16 +138,16 @@ script:
             -cpus-per-worker 8                                          \\
             -cmsearch-cpu 32                                            \\
             -cmsearch-path   \$(dirname \$(which cmsearch))             \\
-            -model-path      inp/cmsearch_data/rfam1410.cm              \\
-            -rfam-amendments inp/cmsearch_data/rfam1410_amendments.xml  \\
-            -rfam-stockholm  inp/cmsearch_data/Rfam.seed                \\
-            -rfam-version    14.10                                      \\
+            -model-path      inp/cmsearch_data/rfam151.cm      \\
+            -rfam-amendments inp/cmsearch_data/rfam151_amendments.xml   \\
+            -rfam-stockholm  inp/cmsearch_data/Rfam.seed            \\
+            -rfam-version    15.1                                       \\
             -truncate_terminal_Ns                                       \\
     """
 /*
     Notes on parallelization aspects of cmsearch:
     
-  - cmsearch is the underlyig binary invoked by cmsearch_wnode.
+  - cmsearch is the underlying binary invoked by cmsearch_wnode.
     It is multithreaded (-cmsearch-cpu), but multithreading has 
     startup-overhead, and scales up to about 32 CPUs.
 

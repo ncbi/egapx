@@ -23,7 +23,7 @@ workflow bam2asn {
 process convert {
     label 'long_job'
     label 'large_disk'
-    label 'multi_node'
+    label 'multi_node_single_cpu'
     label 'small_mem'
     input:
         path in_bam

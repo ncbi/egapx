@@ -1,0 +1,277 @@
+0a7811385bbd52a3d777c73858041c7ab30d65b4:
+  local.config:
+  - - ui/assets/config/executor
+    - v0.1.0
+0dba176a00ed24565ba915e07f91564331ae5bb7:
+  biowulf_cluster.config:
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+0de3455b534f6b86eac62b2a416f0e3c9733a800:
+  biowulf_local.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+12fdda84b1e2181b04ed3da20d96f6fd34a78484:
+  biowulf_cluster.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+2243da782e5310ef7c66d827dbace807986db0e0:
+  ncbi-sge.config:
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+2b794db249093a87ca2ea5e635930e6de71b4f61:
+  local.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+2edbc9703658e6f06af65bc5343f469515f4b575:
+  aws.config:
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+3244157b4187661fe4506a81d9a782b736711165:
+  ncbi-sge.config:
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+3453daa7a0018d347de27a71caf717d10c0160a6:
+  aws.config:
+  - - ui/assets/config/user
+    - 0.5.1
+37ccda5fdfab7177aeae9975533097605e9a88dc:
+  process_resources.config:
+  - - ui/assets/config/user
+    - 0.5.1
+3cedd8753f2c1c6b9c083d1a2162f46f679adbf8:
+  slurm.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+41c3b31501f9d3ccfe5b9dad3d0ddd70bdd375e2:
+  biowulf_local.config:
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+4d8895b9498c92245f7fde8de057b9a18126bfc4:
+  docker_minimal.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+  - - ui/assets/config/user
+    - 0.5.1
+524e14b069ac90aaddb0320ce73764217a847802:
+  docker-internal.config:
+  - - ui/assets/config/user
+    - 0.5.1
+55cbdeb7c24a4e331478b978cecfd6ba3d114dc1:
+  ncbi-sge.config:
+  - - ui/assets/config/user
+    - 0.5.1
+6103aec97ef6fe404f49fdc028525789952f9a28:
+  biowulf_local.config:
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+66cd7031af2318329edb2dd8f770278e0e056367:
+  docker.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - v0.1.0
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+6741d41b2686fb3df3935dd73c1dc83b2379f9f8:
+  slurm.config:
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+7ed3ec4d9f5ae804b9c5302e1c4ef07a081e0b4a:
+  ncbi-sge.config:
+  - - ui/assets/config/executor
+    - v0.2-alpha
+87ad1ef60b97e555c8b0b78529b65410f30f9813:
+  biowulf_cluster.config:
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+9110ef5a2fd5d9ada948962f1fa7fde4ef537853:
+  docker.config:
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+  - - ui/assets/config/user
+    - 0.5.1
+98cbb5b3f563d03cb5c0f137ed817cc6770155ae:
+  ncbi-sge.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+9e015e1516fd78295e14bc5590a1cb22b4d4b0f6:
+  aws.config:
+  - - ui/assets/config/executor
+    - v0.1.0
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+9ea0c678873b7ad83779d62c23ced7e3859aea8b:
+  local.config:
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+b0a365fac8496b56e02ee5029b9985058bc94ec6:
+  biowulf_cluster.config:
+  - - ui/assets/config/user
+    - 0.5.1
+bab2ba56f733909bc3d35f85ee79f74ab69eb4c9:
+  slurm.config:
+  - - ui/assets/config/user
+    - 0.5.1
+cfe8c2d6151db9e18244c48ff8e9e60e52ab59a5:
+  ncbi-local.config:
+  - - ui/assets/config/user
+    - 0.5.1
+cff0d986ae10617f1c3fd7887675f72db0d82701:
+  local.config:
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  ncbi-local.config:
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+d945db3cc4598b701e468023de82b97db76474ae:
+  biowulf_local.config:
+  - - ui/assets/config/user
+    - 0.5.1
+e4a63f46e2b439341e8dd962f5038af4cc28a393:
+  singularity.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - 0.4.0-alpha
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+  - - ui/assets/config/executor
+    - v0.1.0
+  - - ui/assets/config/executor
+    - v0.1.1
+  - - ui/assets/config/executor
+    - v0.1.2
+  - - ui/assets/config/executor
+    - v0.2-alpha
+  - - ui/assets/config/user
+    - 0.5.1
+ecb176d22704fcea66f036ac937767336b75c2d0:
+  aws.config:
+  - - ui/assets/config/executor
+    - 0.3.0-alpha
+  - - ui/assets/config/executor
+    - 0.3.1-alpha
+  - - ui/assets/config/executor
+    - 0.3.2-alpha
+  - - ui/assets/config/executor
+    - v0.2-alpha
+faaa41939a70e207ced4d0676646544b4517b262:
+  aws.config:
+  - - ui/assets/config/executor
+    - 0.4.1-alpha
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha
+fe0e8469543e708710fb10213afde288da5c5fad:
+  docker-internal.config:
+  - - ui/assets/config/executor
+    - 0.5.0
+  - - ui/assets/config/executor
+    - 0.5.0-alpha

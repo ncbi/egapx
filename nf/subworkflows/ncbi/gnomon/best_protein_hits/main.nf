@@ -29,7 +29,7 @@ workflow best_protein_hits {
 
 
 process run_protein_filter_replacement {
-    label 'multi_cpu'
+    label 'single_cpu'
     label 'small_mem'
     input:
         path gnomon_prot_asn, stageAs: 'indexed/*'
