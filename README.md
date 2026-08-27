@@ -420,6 +420,8 @@ EGAPx runs [MultiQC](https://seqera.io/multiqc/) to produce a single HTML report
 * Genome masking statistics
 * RNA-seq and protein alignment statistics
 
+:warning: The current MultiQC report is missing data for protein alignments and for RNA-seq alignments from local data (see [Release Notes](https://github.com/ncbi/egapx/releases)). Please open a GitHub [issue](https://github.com/ncbi/egapx/issues) for bug reports or feature requests.
+
 
 **Feature counts**
 
