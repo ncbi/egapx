@@ -65,11 +65,12 @@ workflow annot_proc_plane {
         best_naming_hits
         swiss_prot_asn
         prot_denylist
+        splices_files
         task_params     // task parameters for every task
     main:
         // Post GNOMON
         // might come its own plane     
-        gnomon_biotype(gnomon_models,/*splices_file  -- constant*/ [],  prot_denylist, gencoll_asn, swiss_prot_asn, [], alignments, name_cleanup_rules_file, lineage_taxids, task_params.get('gnomon_biotype', [:]))
+        gnomon_biotype(gnomon_models, splices_files,  prot_denylist, gencoll_asn, swiss_prot_asn, [], alignments, name_cleanup_rules_file, lineage_taxids, task_params.get('gnomon_biotype', [:]))
 
         annot_builder(gencoll_asn, genome_asn, gnomon_models, cmsearch_models, trnascan_models, task_params.get('annot_builder', [:]))
         def accept_ftable_file = annot_builder.out.accept_ftable_annot
@@ -109,4 +110,6 @@ workflow annot_proc_plane {
         gff_annotated_file = annotwriter.out.annoted_file
         annot_proteins = generate_fasta_from_annots.out.proteins
         gnomon_biotype_contam_rpt = gnomon_biotype.out.contam_rpt
+        feature_counts_xml = final_asn_markup.out.feature_counts_xml
+        feature_stats_xml = final_asn_markup.out.feature_stats_xml
 }

@@ -43,14 +43,7 @@ process register_stats {
     echo "${stranded_runs.join('\n')}" > ./stranded_runs.mft
     echo "${unstranded_runs.join('\n')}" > ./unstranded_runs.mft
 
-    rnaseq_register_stats    \
-      -gencoll-asn ${gencoll_asn}           \
-      -sra-metadata-manifest ./sra_metadata.mft         \
-      -collapsed-aligns-manifest ./collapsed_aligns.mft \
-      -per-run-counts-manifest ./per_run_counts.mft     \
-      -stranded-runs-manifest ./stranded_runs.mft       \
-      -unstranded-runs-manifest ./unstranded_runs.mft   \
-      $params  -o ./run_stats.tsv
+    rnaseq_register_stats -gencoll-asn ${gencoll_asn} -sra-metadata-manifest ./sra_metadata.mft -collapsed-aligns-manifest ./collapsed_aligns.mft -per-run-counts-manifest ./per_run_counts.mft -stranded-runs-manifest ./stranded_runs.mft -unstranded-runs-manifest ./unstranded_runs.mft $params  -o ./run_stats.tsv
 
     ls -l 
     """

@@ -8,9 +8,9 @@ workflow bam_strandedness {
     take:
         bam_list              // list: BAM
         sra_metadata        // path: file with sra metadata
-        parameters          // Map : extra parameter and parameter update
+        parameters          // Map : extra parameter and parameter update.
     main:
-        // Not yet used but supposed to be used by rnaseq_divide_by_strandedness 
+        // Not yet used but supposed to be used by rnaseq_divide_by_strandedness
         rnaseq_divide_by_strandedness_params = merge_params("-min-aligned 1000000 -min-unambiguous 200 -min-unambiguous-pct 2 -max-unambiguous-pct 100 -percentage-threshold 98", parameters, 'rnaseq_divide_by_strandedness')
         rnaseq_divide_by_strandedness(bam_list, sra_metadata, rnaseq_divide_by_strandedness_params)
     emit:

@@ -65,7 +65,7 @@ process generate_jobs {
 
 process run_rnaseq_collapse {
     label 'multi_node'
-    label 'small_mem'
+    label 'med_mem'
     input:
         path genome, stageAs: 'genome/*'
         path scaffold_list

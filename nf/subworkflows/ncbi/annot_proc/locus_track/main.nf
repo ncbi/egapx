@@ -43,7 +43,7 @@ workflow locus_track {
 
 
 process run_locus_track {
-    label 'multi_cpu'
+    label 'single_cpu'
     label 'small_mem'
     input:
         path annotation 

@@ -23,6 +23,61 @@ include { gnomon_align_sort } from "./gnomon_align_sort/main"
 
 params.intermediate = false
 
+include { checkpoint_save; checkpoint_load_channels; CHECKPOINT_LOAD_JSON} from "./../../../../nf/lib/checkpoint_both"
+workflow gnomon_plane_cached {
+    take:
+        genome_asn
+        scaffolds
+        gencoll_asn
+        proteins_asn
+        alignments // list of all relevent input alignments
+        sra_exons // combined, from rnaseq_long and _short
+        sra_exons_slices 
+        proteins_trusted
+        // Alternative parameters, one of them should be set
+        // tax_id - NCBI tax id of the closest taxon to the genome
+        // hmm_params - HMM parameters
+        tax_id          // NCBI tax id of the closest taxon to the genome
+        hmm_params      // HMM parameters
+        train_hmm       // Boolean, whether to train HMM
+        //
+        softmask        // softmask for GNOMON, optional
+        max_intron      // max intron length
+        reference_sets  // reference sets, for now only swissprot
+        gnomon_filtering_scores_file // scores for gnomon add filtering scores task
+        task_params     // task parameters for every task
+    main:
+        def checkpoint_dir = task_params.get('checkpoints_dir', [])
+        def checkpoint_name = 'gnomon_plane'
+        def checkpoint_enabled = task_params.get('checkpoints_save', false)
+        def checkpoint_args = [name: checkpoint_name, dir: checkpoint_dir, enabled: checkpoint_enabled]
+        def ck_file = file("${checkpoint_dir}/${checkpoint_name}.json")
+        def out_obj=[:]
+        if (ck_file.exists()) {
+            CHECKPOINT_LOAD_JSON(checkpoint_name, checkpoint_dir)
+            //def loaded = checkpoint_load_channels(CHECKPOINT_LOAD_JSON.out.json_file)
+            def loaded = checkpoint_load_channels(checkpoint_args)
+            out_obj = loaded
+        } else {
+            gnomon_plane(genome_asn, scaffolds, gencoll_asn, proteins_asn, 
+                        alignments, sra_exons, sra_exons_slices, proteins_trusted, 
+                        tax_id, hmm_params, train_hmm, softmask, max_intron, 
+                        reference_sets, gnomon_filtering_scores_file, task_params) 
+            out_obj = gnomon_plane.out
+            checkpoint_save([gnomon_plane.out], checkpoint_args)
+        }
+    emit:
+        gnomon_models = out_obj.gnomon_models   // gn_models
+        //gnomon_models = gn_models
+        trained_hmm = out_obj.trained_hmm
+        gnomon_summaries = out_obj.gnomon_summaries
+        gnomon_quality_report = out_obj.gnomon_quality_report
+        gnomon_report = out_obj.gnomon_report
+        alignments = out_obj.alignments
+        best_naming_hits = out_obj.best_naming_hits
+        swiss_prot_asn  = out_obj.swiss_prot_asn
+}
+
 workflow gnomon_plane {
     take:
         genome_asn
@@ -60,7 +115,7 @@ workflow gnomon_plane {
 
 
         (chains, chains_slices, evidence, evidence_slices, _ ) = chainer(gnomon_align_sort.out.sorted_alignments, effective_hmm, /* evidence_denylist */ [], /* gap_fill_allowlist */ [], scaffolds, [proteins_trusted].flatten(), genome_asn, proteins_asn, task_params.get('chainer_wnode', [:]))
-        (gn_models, gn_models_slices) = gnomon_wnode(scaffolds, chains, chains_slices, effective_hmm, [], softmask, genome_asn, proteins_asn, task_params.get('gnomon_wnode', [:]))
+               (gn_models, gn_models_slices) = gnomon_wnode(scaffolds, chains, chains_slices, effective_hmm, [], softmask, genome_asn, proteins_asn, task_params.get('gnomon_wnode', [:]))
         (summaries, qual_report, report) = gnomon_evidence_summary(genome_asn, proteins_asn, evidence, evidence_slices, gn_models.collect(), gn_models_slices.collect(), sra_exons, sra_exons_slices, tax_id, task_params.get('gnomon_evidence_summary', [:]))
                 // might come its own plane
         swiss_prot_asn = fetch_swiss_prot_asn(reference_sets)

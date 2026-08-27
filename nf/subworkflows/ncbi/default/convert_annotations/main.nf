@@ -52,12 +52,12 @@ process run_converter {
         asn2fasta -nogenbank -i \${af} -prots-only -o tmpout/\${afb}.proteins.faa
     done
     ##echo 'D: ' \${found_afbs[@]}
-    cat `find tmpout -name g*.gff -o -name all_unannot*.genomic.gff` > output/complete.genomic.gff
-    cat `find tmpout -name g*.gtf -o -name all_unannot*.genomic.gtf` > output/complete.genomic.gtf
-    cat `find tmpout -name g*.genomic.fna -o -name all_unannot*.genomic.fna` > output/complete.genomic.fna
-    cat `find tmpout -name g*.transcripts.fna -o -name all_unannot*.transcripts.fna` > output/complete.transcripts.fna
-    cat `find tmpout -name g*.cds.fna -o -name all_unannot*.cds.fna` > output/complete.cds.fna
-    cat `find tmpout -name g*.proteins.faa -o -name all_unannot*.proteins.faa` > output/complete.proteins.faa
+    cat `find tmpout -name *.gff -o -name all_unannot*.genomic.gff` > output/complete.genomic.gff
+    cat `find tmpout -name *.gtf -o -name all_unannot*.genomic.gtf` > output/complete.genomic.gtf
+    cat `find tmpout -name *.genomic.fna -o -name all_unannot*.genomic.fna` > output/complete.genomic.fna
+    cat `find tmpout -name *.transcripts.fna -o -name all_unannot*.transcripts.fna` > output/complete.transcripts.fna
+    cat `find tmpout -name *.cds.fna -o -name all_unannot*.cds.fna` > output/complete.cds.fna
+    cat `find tmpout -name *.proteins.faa -o -name all_unannot*.proteins.faa` > output/complete.proteins.faa
     rm -rf tmpout
     touch output/complete.genomic.gff
     touch output/complete.genomic.gtf

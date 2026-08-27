@@ -1,6 +1,31 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
 
+include { checkpoint_save; checkpoint_load_channels; CHECKPOINT_LOAD_JSON} from "./../../../../nf/lib/checkpoint_both"
+workflow trnascan_plane_cached {
+    take:
+        genome_fasta  // path to genome fasta (can be gzipped)
+        task_params
+    main:
+        def checkpoint_dir = task_params.get('checkpoints_dir', [])
+        def checkpoint_name = 'trnascan_plane'
+        def checkpoint_enabled = task_params.get('checkpoints_save', false)
+        def checkpoint_args = [name: checkpoint_name, dir: checkpoint_dir, enabled: checkpoint_enabled]
+        def ck_file = file("${checkpoint_dir}/${checkpoint_name}.json")
+        def out_obj=[:]
+        if (ck_file.exists()) {
+            CHECKPOINT_LOAD_JSON(checkpoint_name, checkpoint_dir)
+            def loaded = checkpoint_load_channels(checkpoint_args)
+            out_obj = loaded
+        } else {
+            trnascan_plane(genome_fasta)
+            out_obj = trnascan_plane.out
+            checkpoint_save([trnascan_plane.out], checkpoint_args)
+        }
+    emit:
+    trnascan_annots = out_obj.trnascan_annots
+}
+
 // ----------------------------------------------------------------------------
 workflow trnascan_plane
 {

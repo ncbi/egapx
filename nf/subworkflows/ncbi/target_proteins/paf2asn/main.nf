@@ -23,7 +23,7 @@ workflow paf2asn {
 
 process run_paf2asn {
     label 'long_job'
-    label 'multi_node'
+    label 'multi_node_single_cpu'
     label 'small_mem'
     input:
         path genome,  stageAs: 'indexed/genome.asnt'

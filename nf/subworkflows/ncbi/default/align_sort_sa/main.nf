@@ -9,7 +9,7 @@ workflow align_sort_sa {
     take:
         genome_asn
         proteins_asn 
-        alignments  //path: alignment files
+        alignments      //path: alignment files
         parameters      // Map : extra parameter and parameter update
     main:
         default_params = " -nogenbank "
@@ -22,7 +22,7 @@ workflow align_sort_sa {
 
 
 process run_align_sort {
-    label 'multi_cpu'
+    label 'multi_cpu_single_node'
     label 'large_mem'
     input:
         path genome, stageAs: 'indexed/genome.asnt'

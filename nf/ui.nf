@@ -27,6 +27,15 @@ process export {
         path user_gnomon_quality_report, stageAs: 'GNOMON/*'
         path gnomon_summaries, stageAs: 'GNOMON/*'
         path mask_stats, stageAs: 'stats/*'
+        path rnaseq_run_stats, stageAs: 'stats/rnaseq_short/*'
+        path rnaseq_align_report, stageAs: 'stats/rnaseq_short/*'
+        path rnaseq_run_reports, stageAs: 'stats/rnaseq_short/*'
+        path rnaseq_long_align_report, stageAs: 'stats/rnaseq_long/*'
+        path multiqc_report, stageAs: 'multiqc_report/*'
+        path rnlp_filter_est_align_stats, stageAs: 'stats/rnaseq_long/*'
+        path minimap2_stats, stageAs: 'stats/rnaseq_long/*'
+        path filtered_protein_alignments, stageAs: 'filtered_protein_alignments/*'
+        path prot_align_stats, stageAs: 'stats/target_proteins/*'
         // path locus
     output:
         path "*", includeInputs: true
@@ -62,5 +71,14 @@ workflow {
            egapx.out.user_gnomon_report,
            egapx.out.user_gnomon_quality_report,
            egapx.out.gnomon_summaries,
-           egapx.out.mask_stats)
+           egapx.out.mask_stats,
+           egapx.out.rnaseq_run_stats,
+           egapx.out.rnaseq_align_report,
+           egapx.out.rnaseq_run_reports,
+           egapx.out.filtered_protein_alignments,
+           egapx.out.multiqc_report,
+           egapx.out.rnaseq_long_align_report,
+           egapx.out.rnlp_filter_est_align_stats,
+           egapx.out.minimap2_stats,
+           egapx.out.prot_align_stats)
 }

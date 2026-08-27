@@ -1,6 +1,5 @@
 #!/usr/bin/env nextflow
 
-
 nextflow.enable.dsl=2
 
 params.import_prefix = "../../../../nf/subworkflows/ncbi/" // redirected during testing
@@ -11,8 +10,45 @@ include { prepare_masks } from "./${params.import_prefix}winmask/prepare_masks/m
 include { gc_makeblastdb } from "./${params.import_prefix}winmask/gc_makeblastdb/main"
 include { mask_assm_stats } from "./${params.import_prefix}winmask/mask_assm_stats/main"
 
+include { checkpoint_save; checkpoint_load_channels; CHECKPOINT_LOAD_JSON} from "./../../../../nf/lib/checkpoint_both"
 
 params.intermediate = false
+
+
+workflow winmask_plane_cached {
+    take:
+        genome_asnb
+        seqids
+        gencoll_asn
+        cmsearch_annot
+        dustmask_data
+        rmask_data
+        task_params
+        //
+        //checkpoint_dir
+    main:
+        def checkpoint_dir = task_params.get('checkpoints_dir', [])
+        def checkpoint_name = 'winmask_plane'
+        def checkpoint_enabled = task_params.get('checkpoints_save', false)
+        def checkpoint_args = [name: checkpoint_name, dir: checkpoint_dir, enabled: checkpoint_enabled]
+        def ck_file = file("${checkpoint_dir}/${checkpoint_name}.json")
+        def out_obj=[:]
+        if (ck_file.exists()) {
+            CHECKPOINT_LOAD_JSON(checkpoint_name, checkpoint_dir)
+            //def loaded = checkpoint_load_channels(CHECKPOINT_LOAD_JSON.out.json_file)
+            def loaded = checkpoint_load_channels(checkpoint_args)
+            out_obj = loaded
+        } else {
+            winmask_plane(genome_asnb, seqids, gencoll_asn,
+                          cmsearch_annot, dustmask_data, rmask_data, task_params)
+            out_obj = winmask_plane.out
+            checkpoint_save([winmask_plane.out], checkpoint_args)
+        }
+    emit:
+        blastdb    = out_obj.blastdb
+        softmask   = out_obj.softmask
+        mask_stats = out_obj.mask_stats
+}
 
 workflow winmask_plane {
     take:

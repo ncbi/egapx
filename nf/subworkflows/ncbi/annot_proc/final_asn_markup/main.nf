@@ -60,6 +60,8 @@ workflow final_asn_markup {
         stats = final_asn.out.stats
         annotated_genome_asn = final_asn.out.annotated_genome_asn
         annotation_data_comment = final_asn.out.annotation_data_comment
+        feature_counts_xml = final_asn.out.feature_counts_xml
+        feature_stats_xml = final_asn.out.feature_stats_xml
 }
 
 
@@ -77,12 +79,14 @@ process final_asn {
         path locustypes // tsv
         val params
     output:
-        path "output/*", emit: "all"
-        path "output/scaf/${assembly_name}/*.asn", emit: "to_convert"
-        path "output/val/${assembly_name}/*", emit: "validated"
-        path "output/stats/*", emit: "stats"
-        path "output/annotated_genome.asn", emit: "annotated_genome_asn"
-        path "output/annotation_data.cmt", emit: "annotation_data_comment"
+        path "output/*", emit: 'all'
+        path "output/scaf/${assembly_name}/*.asn", emit: 'to_convert'
+        path "output/val/${assembly_name}/*", emit: 'validated'
+        path "output/stats/*", emit: 'stats'
+        path "output/annotated_genome.asn", emit: 'annotated_genome_asn'
+        path "output/annotation_data.cmt", emit: 'annotation_data_comment'
+        path "output/stats/feature_counts.xml", emit: 'feature_counts_xml'
+        path "output/stats/feature_stats.xml", emit: 'feature_stats_xml'
     script:
     """
     mkdir -p output
@@ -157,5 +161,7 @@ process final_asn {
 
 
     echo "1" > output/final_asn.log
+    echo "1" > output/stats/feature_counts.xml
+    echo "1" > output/stats/feature_stats.xml
     """
 }

@@ -5,6 +5,8 @@ import subprocess
 import shutil
 import sys
 import os
+import tempfile
+import getpass
 
 parser = argparse.ArgumentParser(description="Invoke `command` (must be a worker_node type) on a subset of provided ids.")
 parser.add_argument("--ids",                    required=True, help="Seq-ids in scope (all or subset-of) the contents of asn_cache.")
@@ -23,6 +25,9 @@ assert 1 <= args.batch_num <= args.num_batches
 os.makedirs(args.work_dir + "/inp/", exist_ok=False)
 os.makedirs(args.work_dir + "/out/", exist_ok=False)
 jobs_file = args.work_dir + "/inp/jobs.xml"
+
+tmpdir = tempfile.gettempdir()
+username = getpass.getuser()
 
 # generate jobs.xml
 subprocess.run(
@@ -50,7 +55,7 @@ starting_job_id = batch_size * (args.batch_num - 1) + 1
 cmd_name        = args.command[0].replace("/", "_")
 
 subprocess.run(
-    (["flock", "-x", f"/tmp/egapx.{cmd_name}.lock" ] if args.exclusive else [])
+    (["flock", "-x", f"{tmpdir}/egapx.{username}.{cmd_name}.lock" ] if args.exclusive else [])
     + args.command
     + [
         "-input-jobs"   , args.work_dir + "/inp/jobs_batch.xml",
