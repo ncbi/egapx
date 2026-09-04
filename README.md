@@ -316,7 +316,7 @@ If your Internet access is more restricted or you want reproducible runs with co
   ```
   rm egap*sif
   singularity cache clean
-  singularity pull docker://ncbi/egapx:1.0.0
+  singularity pull docker://ncbi/egapx:1.0
   ```
   Clone the repo:
   ```
@@ -352,7 +352,7 @@ If your Internet access is more restricted or you want reproducible runs with co
 - Run EGAPx to generate the `egapx_config` folder and edit the `biowulf_cluster.config`:
   ```
   python3 ui/egapx.py edit_D_farinae_small.yaml -e biowulf_cluster -w <workdir> -o <output> -lc local_cache
-  echo "process.container = '/path/to/egapx_1.0.0.sif'"  >> egapx_config/biowulf_cluster.config
+  echo "process.container = '/path/to/egapx_1.0.sif'"  >> egapx_config/biowulf_cluster.config
   ```
   After the configuration files are finalized, run the EGAPx pipeline: 
   ```
