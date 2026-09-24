@@ -240,7 +240,7 @@ process minimap2_wnode_fasta {
     mkdir -p tmp/asncache
     mkdir -p tmp/interim
     prime_cache -cache tmp/asncache/ -ifmt fasta -i genome/* -split-sequences
-    minimap2_wnode -separate-output-by-run no -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id $start_job_id -input-jobs job.xml -nogenbank -asn-cache tmp/asncache -gc $gencoll -work-area tmp -O tmp/interim $minimap2_wnode_params
+    minimap2_wnode -separate-output-by-run no -minimap2-executable `which minimap2` -filter-executable `which exon_selector` -start-job-id ${task.index} -input-jobs job.xml -nogenbank -asn-cache tmp/asncache -gc $gencoll -work-area tmp -O tmp/interim $minimap2_wnode_params
     mkdir -p alignments
     cat tmp/interim/* > alignments/minimap2_wnode.${task.index}.gpx-job.asnb
     rm -rf tmp

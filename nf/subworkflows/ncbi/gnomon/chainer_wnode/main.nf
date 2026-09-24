@@ -3,7 +3,7 @@ nextflow.enable.dsl=2
 
 
 include { merge_params } from '../../utilities'
-include { run_align_sort }  from '../../default/align_sort_sa/main.nf'
+include { run_align_sort }  from '../../default/align_sort_sa/main'
 
 
 workflow chainer_wnode {
@@ -60,6 +60,7 @@ process generate_jobs {
     else
         effective_njobs=$njobs
     fi
+    echo effective_njobs=\$effective_njobs, njobs=\$njobs
     split -nr/\$effective_njobs jobs job. -da 3
     """
     stub:

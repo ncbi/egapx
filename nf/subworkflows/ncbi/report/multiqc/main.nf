@@ -309,7 +309,7 @@ process run_multiqc {
         path feature_stats_xml, stageAs: 'inputlogs/*'
         path rnaseq_long_align_report_xml, stageAs: 'inputlogs/*'
         // Staged outside inputlogs/ so MultiQC (which only scans inputlogs/) skips it; restore stageAs: 'inputlogs/*' to re-enable this table.
-        path prot_align_stats, stageAs: 'excluded_inputlogs/*'
+        path prot_align_stats, stageAs: 'inputlogs/*'
         path rnaseq_short_align_report_xml, stageAs: 'inputlogs/*'
         path software_versions_table, stageAs: 'inputlogs/*'
         val multiqc_params

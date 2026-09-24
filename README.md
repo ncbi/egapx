@@ -48,6 +48,7 @@ See the EGAPx license [here](https://github.com/ncbi/egapx/blob/main/LICENSE).
   - [Submitting annotation with a new assembly](#submitting-annotation-with-a-new-assembly)
   - [Submitting annotation for an existing GenBank assembly](#submitting-annotation-for-an-existing-genbank-assembly)
   - [Review output for submission readiness](#review-output-for-submission-readiness)
+  - [Editing pre-submission annotation files](#editing-pre-submission-annotation-files)
 - [FAQ](#faq)
 - [References](#references)
 - [Contact us](#contact-us)
@@ -201,10 +202,6 @@ By default, EGAPx uses `miniprot` to align protein sets to the genome. Optionall
     ```
 - To exclude specific taxids from the target set:
     ```
-    proteins_deny_taxids: 7227, 7240
-    ```
-    OR
-    ```
     proteins_deny_taxids:
       - 7227
       - 7240
@@ -316,7 +313,7 @@ If your Internet access is more restricted or you want reproducible runs with co
   ```
   rm egap*sif
   singularity cache clean
-  singularity pull docker://ncbi/egapx:1.0
+  singularity pull docker://ncbi/egapx:1.0.1
   ```
   Clone the repo:
   ```
@@ -352,7 +349,7 @@ If your Internet access is more restricted or you want reproducible runs with co
 - Run EGAPx to generate the `egapx_config` folder and edit the `biowulf_cluster.config`:
   ```
   python3 ui/egapx.py edit_D_farinae_small.yaml -e biowulf_cluster -w <workdir> -o <output> -lc local_cache
-  echo "process.container = '/path/to/egapx_1.0.sif'"  >> egapx_config/biowulf_cluster.config
+  echo "process.container = '/path/to/egapx_1.0.1.sif'"  >> egapx_config/biowulf_cluster.config
   ```
   After the configuration files are finalized, run the EGAPx pipeline: 
   ```
@@ -420,7 +417,7 @@ EGAPx runs [MultiQC](https://seqera.io/multiqc/) to produce a single HTML report
 * Genome masking statistics
 * RNA-seq and protein alignment statistics
 
-:warning: The current MultiQC report is missing data for protein alignments and for RNA-seq alignments from local data (see [Release Notes](https://github.com/ncbi/egapx/releases)). Please open a GitHub [issue](https://github.com/ncbi/egapx/issues) for bug reports or feature requests.
+:warning: The current MultiQC report has inaccurate or missing alignments info from local RNA-seq/proteins data (see [Release Notes](https://github.com/ncbi/egapx/releases)). Please open a GitHub [issue](https://github.com/ncbi/egapx/issues) for bug reports or feature requests.
 
 
 **Feature counts**
@@ -668,10 +665,10 @@ Command:
 
 ```
 # Using Docker:
-alias prepare_submission='docker run --rm -i --volume="$PWD:$PWD" --workdir="$PWD" ncbi/egapx:1.0 prepare_submission'
+alias prepare_submission='docker run --rm -i --volume="$PWD:$PWD" --workdir="$PWD" ncbi/egapx:1.0.1 prepare_submission'
 
 # Using Singularity or Apptainer:
-alias prepare_submission='singularity exec --cleanenv --bind "$PWD:$PWD" --pwd "$PWD" docker://ncbi/egapx:1.0 prepare_submission'
+alias prepare_submission='singularity exec --cleanenv --bind "$PWD:$PWD" --pwd "$PWD" docker://ncbi/egapx:1.0.1 prepare_submission'
 
 # Invoke the app:
 prepare_submission --egapx-annotated-genome-asn annotated_genome.asn --submission-template-file template.sbt --bioproject-id PRJNA# --src-file source-table.txt --assembly-data-structured-comment-file genome.asm --linkage-evidence paired-ends --out-dir out
@@ -738,6 +735,10 @@ prepare_submission --egapx-annotated-genome-asn annotated_genome.asn --submissio
 ![alt text](examples/images/Submissions_Assignment.png)
   - For additional information about genome submissions see https://www.ncbi.nlm.nih.gov/genbank/genomesubmit/
   - Please contact genomes@ncbi.nlm.nih.gov if you encounter any issues with the submission process
+
+### Editing pre-submission annotation files
+
+It is possible to edit the EGAPx GFF3 output to incorporate manually curated features, however edited GFF3 files need to be processed through [table2asn](https://www.ncbi.nlm.nih.gov/genbank/table2asn/) and not the `prepare_submission` workflow. Please open a GitHub [issue](https://github.com/ncbi/egapx/issues) for advice on how to provide the right inputs for this process. 
 
 ## FAQ
 [Back to Top](#Contents)

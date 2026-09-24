@@ -15,7 +15,7 @@ workflow filter_est_align {
         String align_sort_params = merge_params('-ifmt seq-align -nogenbank', parameters, 'align_sort')
         align_filter(align_asn, align_filter_params)
         align_sort(align_filter.out, align_sort_params)
-        gp_register_stats(align_sort.out, gencoll, 'filter_est_align')
+        gp_register_stats(align_filter.out, gencoll, 'filter_est_align')
     emit:
         alignments = align_sort.out
         unsorted_alignments = align_filter.out

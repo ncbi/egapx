@@ -13,7 +13,7 @@ workflow gnomon_align_sort {
         String input_sorting = parameters.get('input_aligns_sort', '')
         def sort_aligns = alignments
         if (!input_sorting.contains("presorted")) {
-            String lcl_params
+            String lcl_params = ""
             if (input_sorting.contains("merge_only")) {
                 lcl_params = "-merge"
             }
