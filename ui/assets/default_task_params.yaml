@@ -2,7 +2,7 @@ tasks:
   setup:
     convert_genome: force-local-ids
     convert_proteins: force-local-ids
-  align_sort_sa:
+  align_sort_filter_sa:
     align_sort: -limit-mem 13G -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   bam_bin_and_sort:
     bam_bin: -avg-size-per-bin 200000000 -file-pattern 'bin#.bam' -exclude-organelle
@@ -17,8 +17,9 @@ tasks:
       5 -min-non-consensussupport 10 -min-support-fraction 0.03 -minex 10 -mininframefrac
       0.95 -minlen 225 -minpolya 6 -minprotfrac 0.9 -minscor 40.0 -minsupport 3 -minsupport_mrna
       1 -minsupport_rnaseq 5 -mrnaCDS use_objmgr -oep 10 -protcdslen 450 -sharp-boundary
-      0.2 -tolerance 3 -trim 6 -utrclipthreshold 0.01 -filterest
-      -filtermrna -filterprots -opposite -collapsest
+      0.2 -tolerance 3 -trim 6 -utrclipthreshold 0.01
+      -use-long-read-tss -min-cap-blob 25 -min-cap-weight 5
+      -filterest -filtermrna -filterprots -opposite -collapsest
     gpx_make_outputs: -default-output-name chains -slices-for affinity -sort-by affinity
     submit_chainer: -minimum-abut-margin 20 -separate-within-introns
   convert_from_bam:
@@ -69,7 +70,7 @@ tasks:
     minimap2_wnode_fasta: -include-mismatch-bases no -high-qual-coverage-score no
     minimap2-params: -x splice --eqx --MD --cs -Y --sam-hit-only -M 0.9 -p 0.1 -N 25 
   filter_est_align:
-    align_filter: -filter '((matches >= 100 && splices > 0) || (matches >= 250 && splices == 0)) && product_coverage >= 0.35 && exon_identity >= 0.85 && consensus_splices >= MUL(SUB(exon_count,1),2) && ((max_intron_len < 200000 && (pct_identity_ungap < 98 || pct_coverage < 90)) ) && SUB(subject_end,subject_start)<5000000 && rank == 1'
+    align_filter: -filter '((matches >= 100 && splices > 0) || (matches >= 250 && splices == 0)) && product_coverage >= 0.35 && exon_identity >= 0.85 && consensus_splices >= MUL(SUB(exon_count,1),2) && ((pct_identity_ungap > 98 && pct_coverage > 90) || max_intron_len < 200000) && SUB(subject_end,subject_start)<5000000 && rank == 1'
     align_sort:  -limit-mem 13G -k subject,subject_start,-subject_end,subject_strand,query,query_start,-query_end,query_strand,-num_ident,gap_count
   paf2asn:
     paf2asn: -prosplign-refinement
@@ -78,8 +79,10 @@ tasks:
   gnomon_align_sort:
     input_aligns_sort: merge_only
     align_sort:   -ifmt seq-align  -k 'subject,subject_start,-subject_end' 
+  align_filter_only:
+    align_filter_only: -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  
   align_filter_sa:
-    align_filter:  -filter 'rank=1 OR (pct_identity_gapopen_only > 58 AND (pct_coverage > 50 OR align_length_ungap > 1000))' -ifmt seq-align  
+    align_filter: ''
   gnomon_training:
     gnomon_training: -asn -b
   diamond_identify:
@@ -89,7 +92,7 @@ tasks:
     diamond_blastp: --sam-query-len --comp-based-stats 1 --evalue 0.0001 --very-sensitive --masking 1 --unal 0
   diamond_orthology:
     diamond: -ofmt seq-align-set -query-fmt seq-ids -subject-fmt seq-ids -output-prefix hits
-    diamond_blastp: --sam-query-len --very-sensitive --unal 0 --max-hsps 3 --max-target-seqs 100 --comp-based-stats 0 --masking 0
+    diamond_blastp: --sam-query-len --very-sensitive --unal 0 --max-target-seqs 100  --comp-based-stats 0 --masking 0
   gnomon_biotype:
     gnomon_biotype: ''
   gnomon_evidence_summary:

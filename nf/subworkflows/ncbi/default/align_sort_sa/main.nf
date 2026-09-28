@@ -12,10 +12,8 @@ workflow align_sort_sa {
         alignments      //path: alignment files
         parameters      // Map : extra parameter and parameter update
     main:
-        default_params = " -nogenbank "
-        effective_params = merge_params(default_params, parameters, 'align_sort')
-        run_align_sort(genome_asn, proteins_asn, alignments, effective_params)
-
+        default_params = " -nogenbank " + parameters
+        run_align_sort(genome_asn, proteins_asn, alignments, default_params)
     emit:
         sorted_asn_file = run_align_sort.out.sorted_asn_file
 }

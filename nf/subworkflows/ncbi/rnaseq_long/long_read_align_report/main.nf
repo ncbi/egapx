@@ -34,7 +34,7 @@ process run_long_read_align_report {
     mkdir -p output
     # adding logic to filter out relevant rows from sra_metadata.dat, and using that for the manifest
     grep "^#" ${sra_metadata} > sra_metadata_filtered.dat
-    grep "^#" -v ${minimap_stats} | cut -f 2 | fgrep -f - ${sra_metadata} >> sra_metadata_filtered.dat
+    grep "^#" -v ${minimap_stats} | cut -f 2 | grep -F -f - ${sra_metadata} >> sra_metadata_filtered.dat
     echo "sra_metadata_filtered.dat" > sra_metadata.mft
     echo "${minimap_stats.join('\n')}" > minimap_stats.mft
     echo "${filtered_stats.join('\n')}" > filtered_stats.mft

@@ -72,7 +72,7 @@ def safe_urlretrieve(url, filename):
 # Requires pip install -r requirements.txt
 import yaml
 
-software_version = "1.0"
+software_version = "1.0.1"
 DEFAULT_DATA_VERSION = "current_1"
 
 start_time = time.time()
@@ -712,7 +712,7 @@ def convert_value(value, key, strict, executor='local', staging_root='', staging
 
 path_inputs = {'genome', 'hmm', 'softmask', 'reads_metadata', 'short_reads_metadata', 'long_reads_metadata', 'organelles',
                'proteins', 'proteins_trusted', 'additional_proteins', 'reads', 'short_reads', 'long_reads',
-               'rnaseq_alignments', 'protein_alignments', 'ortho', 'reference_sets', 'prot_denylist',
+               'rnaseq_alignments', 'protein_alignments', 'ortho', 'reference_sets', 'prot_denylist', 'prot_splices',
                'name_cleanup_rules_file', 'gnomon_filtering_scores_file', 'busco_lineage_download',
                'cmsearch', 'assembly_taxid_list', 'proteins_accessions_list' }
 def convert_paths(run_inputs):
@@ -1364,6 +1364,9 @@ def expand_and_validate_params(run_inputs):
     if 'reference_sets' not in inputs or inputs['reference_sets'] is None:
         inputs['reference_sets'] = get_file_path('reference_sets', 'swissprot.asnb.gz')
         inputs['prot_denylist'] = get_file_path('reference_sets', 'swissprot_organelle_bacteria.gi')
+
+    if 'prot_splices' not in inputs or inputs['prot_splices'] is None:
+        inputs['prot_splices'] = get_file_path('reference_sets', 'prot_splices.asn')
 
     if inputs.get('cmsearch', {}).get('enabled'):
         inputs['cmsearch'] = {'files': [get_file_path('cmsearch', f) for f in "Rfam.seed rfam151.cm rfam151_amendments.xml".split()] }
@@ -3326,7 +3329,7 @@ def main(argv):
         nf_cmd += ["--git.branch", subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], text=True).strip()]
 
     #egapx_version =  get_software_version()
-    egapx_version = "1.0.0"
+    egapx_version = "1.0.1"
     nf_cmd += ["--egapx_version", egapx_version]
     # Write params file
     if output:
