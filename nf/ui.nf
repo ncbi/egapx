@@ -75,10 +75,10 @@ workflow {
            egapx.out.rnaseq_run_stats,
            egapx.out.rnaseq_align_report,
            egapx.out.rnaseq_run_reports,
-           egapx.out.filtered_protein_alignments,
-           egapx.out.multiqc_report,
            egapx.out.rnaseq_long_align_report,
+           egapx.out.multiqc_report,
            egapx.out.rnlp_filter_est_align_stats,
            egapx.out.minimap2_stats,
+           egapx.out.filtered_protein_alignments,
            egapx.out.prot_align_stats)
 }
