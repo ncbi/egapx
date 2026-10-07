@@ -116,6 +116,7 @@ workflow rnaseq_short_plane {
 
             bam_strandedness(ch_align.collect(), reads_metadata, task_params.get('bam_strandedness', [:]))
             def strandedness = bam_strandedness.out.strandedness
+            def normalized_strandedness = bam_strandedness.out.normalized_strandedness
 
             // Run bam_bin_and_sort
             bam_bin_and_sort(ch_align, ch_align_index, unpacked_genome_fasta, organelles, task_params.get('bam_bin_and_sort', [:]))
@@ -137,7 +138,7 @@ workflow rnaseq_short_plane {
 
             // Run rnaseq_align_report
             def run_stats = rnaseq_register_stats.out.outputs
-            def run_list = strandedness
+            def run_list = normalized_strandedness
                 .map { strandedness_file ->
                     strandedness_file
                         .readLines()
